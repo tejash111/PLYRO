@@ -72,13 +72,45 @@ prints_nothing() {
   [ -z "$out" ] || { printf '%s\n' "$out"; return 1; }
 }
 
-# run_one <rule> <file name under Assets/_Project> <file content>: run one rule on a one-file Assets folder.
-run_one() {
+# run_at <rule> <path below Assets> <file content>: run one rule on a one-file Assets folder.
+run_at() {
   local dir
   dir="$(mktemp -d "$WORK/one.XXXXXX")"
-  mkdir -p "$dir/Assets/_Project"
-  printf '%s' "$3" > "$dir/Assets/_Project/$2"
+  mkdir -p "$(dirname "$dir/Assets/$2")"
+  printf '%s' "$3" > "$dir/Assets/$2"
   "$CHECK" --root "$dir/Assets" --rules "$1" < /dev/null
+}
+
+# run_one <rule> <path below Assets/_Project> <file content>: run_at for a file under _Project.
+run_one() {
+  run_at "$1" "_Project/$2" "$3"
+}
+
+# gen_lines <n>: n comment lines, each ending in a newline.
+gen_lines() {
+  awk -v n="$1" 'BEGIN { for (i = 1; i <= n; i++) print "// line " i }'
+}
+
+# gen_assets <dir> <path below Assets> <lines> [unterminated]: a .cs file of that many lines in
+# <dir>/Assets. With "unterminated" the last line has no newline at its end.
+gen_assets() {
+  local f="$1/Assets/$2"
+  mkdir -p "$(dirname "$f")"
+  if [ "${4:-}" = unterminated ]; then
+    printf '%s' "$(gen_lines "$3")" > "$f"
+  else
+    gen_lines "$3" > "$f"
+  fi
+}
+
+# mk_files <dir> <path below Assets>...: empty-ish files in <dir>/Assets.
+mk_files() {
+  local dir="$1" f
+  shift
+  for f in "$@"; do
+    mkdir -p "$(dirname "$dir/Assets/$f")"
+    echo x > "$dir/Assets/$f"
+  done
 }
 
 # put <repo> <path> <content>: write a file below a repo.
@@ -108,7 +140,7 @@ UNITY="unity/MotionBowling/Assets/_Project"
 # ---------------------------------------------------------------------------------------------
 cp -R "$FIXTURES" "$SPACED/fixtures"
 for fx in "$FIXTURES" "$SPACED/fixtures"; do
-  for rule in G-1 G-2 G-3 G-3b; do
+  for rule in G-1 G-2 G-3 G-3b M-3 M-5 M-6 M-8; do
     assert_exit 0 check_pass "$fx" "$rule"
     assert_exit 0 check_fail "$fx" "$rule"
   done
@@ -223,14 +255,443 @@ assert_exit 0 run_one G-1 T.uxml '<ui:Label style="text-shadow: 1px 1px 0px blac
 assert_output_contains "found 4px" shadow 'text-shadow: 2px 2px 4px black;'
 
 # ---------------------------------------------------------------------------------------------
+# SOT-2 text rules: M-3, M-4, M-5, M-6 and M-8. The fixtures are checked in the loop at the top;
+# these are the output lines and the edge cases.
+# ---------------------------------------------------------------------------------------------
+CORE="Assets/_Project/Modules/Gameplay/Runtime/Core"
+
+# M-3: one public top-level type per file, named like the file.
+M3F="$FIXTURES/fail/M-3/Assets"
+assert_output_contains "M-3 $CORE/Two.cs:7 " "$CHECK" --root "$M3F" --rules M-3
+assert_output_contains "'Other'" "$CHECK" --root "$M3F" --rules M-3
+assert_exit 0 output_lacks "Two.cs:3 " "$CHECK" --root "$M3F" --rules M-3
+assert_output_contains "M-3 $CORE/Mismatch.cs:3 " "$CHECK" --root "$M3F" --rules M-3
+assert_output_contains "must be in a file named NotMismatch.cs" "$CHECK" --root "$M3F" --rules M-3
+
+# m3 <source>: the source is the file T.cs, so its one public type has to be called T.
+m3() { run_one M-3 T.cs "$1"; }
+
+assert_exit 0 m3 ''
+assert_exit 0 m3 'class U { }'
+assert_exit 0 m3 'internal class U { }'
+assert_exit 0 m3 'public class T { }'
+# Every keyword and modifier, with the right name (passes) and with a wrong one (fails).
+while IFS= read -r decl; do
+  assert_exit 0 m3 "${decl//NAME/T} { }"
+  assert_exit 1 m3 "${decl//NAME/U} { }"
+done <<'EOF'
+public class NAME
+public struct NAME
+public interface NAME
+public enum NAME
+public record NAME
+public record struct NAME
+public record class NAME
+public sealed class NAME
+public static class NAME
+public abstract class NAME
+public static partial class NAME
+public sealed partial class NAME
+public readonly struct NAME
+public ref struct NAME
+public readonly ref struct NAME
+public unsafe struct NAME
+public unsafe class NAME
+static public class NAME
+sealed public class NAME
+public class NAME<TKey, TValue>
+public class NAME<TKey> where TKey : class
+public enum NAME : byte
+public class NAME : Base<int>, IFoo
+public interface NAME<out TOut>
+EOF
+assert_exit 0 m3 'public delegate void T(int x);'
+assert_exit 0 m3 'public delegate Task<int> T<X>(X x);'
+assert_exit 1 m3 'public delegate Task<int> U<X>(X x);'
+assert_exit 1 m3 'public delegate Dictionary<string, List<int>> U(int x);'
+assert_exit 0 m3 'public delegate Dictionary<string, List<int>> T(int x);'
+assert_exit 1 m3 'public delegate void U(int x);'
+assert_exit 0 m3 'public record T(int A, string B);'
+assert_exit 1 m3 'public record U(int A);'
+assert_exit 1 m3 'public class TT { }'
+assert_exit 1 m3 'public class t { }'
+
+# Namespace depth: block (1), file-scoped (0), nested, none. A type inside a type doesn't count.
+assert_exit 0 m3 'namespace A { public class T { } }'
+assert_exit 0 m3 'namespace A.B { namespace C { public class T { } } }'
+assert_exit 0 m3 'namespace A;
+public class T { }'
+assert_exit 0 m3 'namespace A
+{
+    public class T
+    {
+        public enum Kind { X }
+        public class Nested { }
+        public delegate void Done();
+    }
+}'
+assert_exit 0 m3 'internal class H { public class N { } }
+public class T { }'
+assert_exit 0 m3 'public class T { }
+internal class U { }'
+assert_exit 0 m3 '[System.Serializable] public class T { }'
+assert_exit 1 m3 '[System.Serializable] public class U { }'
+assert_exit 1 m3 '[A][B(1, 2)] public sealed class U { }'
+assert_exit 1 m3 '[Foo("a;b{")]
+public class U { }'
+assert_exit 0 m3 '[Foo("a;b{")]
+public class T { }'
+assert_exit 1 m3 'public class T { }
+public class U { }'
+assert_exit 1 m3 'public class T { } public class U { }'
+assert_exit 1 m3 'namespace A;
+public class T { }
+public class U { }'
+assert_exit 1 m3 'namespace A; public class U { }'
+assert_exit 1 m3 'namespace A { public class T { } }
+namespace B { public class U { } }'
+assert_exit 1 m3 'public class T { }
+public enum E { }'
+assert_exit 1 m3 'public class T { }
+public delegate void D();'
+assert_exit 1 m3 'public class T { }
+public interface IT { }'
+assert_exit 1 m3 'public delegate void T(); public delegate void U();'
+assert_output_contains "M-3 Assets/_Project/T.cs:2 " m3 'public class T { }
+public class U { }'
+
+# Comments and strings: keywords there don't count, and neither do their braces (a stray brace would
+# make the next type look nested, and the check would pass).
+assert_exit 0 m3 '// public class U { }
+public class T { }'
+assert_exit 0 m3 '/* public class U { } */ public class T { }'
+assert_exit 0 m3 '/*
+public class U { }
+*/
+public class T { }'
+assert_exit 1 m3 'public class T { string s = "{"; }
+public class U { }'
+assert_exit 1 m3 'public class T { } // {
+public class U { }'
+assert_exit 1 m3 "public class T { char c = '{'; }
+public class U { }"
+assert_exit 1 m3 "public class T { char c = '\"'; }
+public class U { }"
+assert_exit 1 m3 'public class T { string s = @"{"; }
+public class U { }'
+assert_exit 1 m3 'public class T { string s = @"a""b{"; }
+public class U { }'
+assert_exit 1 m3 'public class T { string s = "\"{"; }
+public class U { }'
+assert_exit 1 m3 'public class T { string s = "//"; }
+public class U { }'
+assert_exit 1 m3 'public class T { string s = @"
+{
+"; }
+public class U { }'
+assert_exit 1 m3 'public class T { string s = $"{1 + 2}"; }
+public class U { }'
+assert_exit 1 m3 'public class T { /* { */ }
+public class U { }'
+assert_exit 1 m3 'public class T { /*
+{
+*/ }
+public class U { }'
+IFS= read -r -d '' ESCAPED_QUOTE_CHAR <<'EOF' || true
+public class T { char c = '\''; string s = "}"; }
+public class U { }
+EOF
+assert_exit 1 m3 "$ESCAPED_QUOTE_CHAR"
+# Windows line endings, a byte order mark, and an apostrophe in a #region line.
+assert_exit 0 m3 $'public class T\r\n{\r\n}\r\n'
+assert_exit 0 m3 $'\xef\xbb\xbfpublic class T { }'
+assert_exit 1 m3 $'\xef\xbb\xbfpublic class U { }'
+assert_exit 0 m3 $'#region It\'s here\npublic class T { }\n#endregion'
+# Preprocessor lines are skipped, so a brace in a #region title doesn't make the next type nested.
+assert_exit 1 m3 $'#region Braces {\npublic class U { }\n#endregion'
+
+# M-4: line count. Over 400 fails, over 300 only warns. A last line without a newline counts.
+M4="$SPACED/m4 files"
+BIG="_Project/Modules/Gameplay/Runtime/Core/Big.cs"
+gen_assets "$M4/l401" "$BIG" 401
+assert_exit 1 "$CHECK" --root "$M4/l401/Assets" --rules M-4
+assert_output_contains "M-4 Assets/$BIG 401 lines (max 400)" "$CHECK" --root "$M4/l401/Assets" --rules M-4
+gen_assets "$M4/l400" "$BIG" 400
+assert_exit 0 "$CHECK" --root "$M4/l400/Assets" --rules M-4
+assert_output_contains "WARN M-4 Assets/$BIG 400 lines (soft limit 300)" "$CHECK" --root "$M4/l400/Assets" --rules M-4
+gen_assets "$M4/l301" "$BIG" 301
+assert_exit 0 "$CHECK" --root "$M4/l301/Assets" --rules M-4
+assert_output_contains "WARN M-4 Assets/$BIG 301 lines (soft limit 300)" "$CHECK" --root "$M4/l301/Assets" --rules M-4
+gen_assets "$M4/l300" "$BIG" 300
+assert_exit 0 "$CHECK" --root "$M4/l300/Assets" --rules M-4
+assert_exit 0 prints_nothing "$CHECK" --root "$M4/l300/Assets" --rules M-4
+gen_assets "$M4/u401" "$BIG" 401 unterminated
+assert_exit 1 "$CHECK" --root "$M4/u401/Assets" --rules M-4
+assert_output_contains "M-4 Assets/$BIG 401 lines (max 400)" "$CHECK" --root "$M4/u401/Assets" --rules M-4
+gen_assets "$M4/u400" "$BIG" 400 unterminated
+assert_exit 0 "$CHECK" --root "$M4/u400/Assets" --rules M-4
+gen_assets "$M4/u301" "$BIG" 301 unterminated
+assert_output_contains "WARN M-4 Assets/$BIG 301 lines (soft limit 300)" "$CHECK" --root "$M4/u301/Assets" --rules M-4
+gen_assets "$M4/u300" "$BIG" 300 unterminated
+assert_exit 0 prints_nothing "$CHECK" --root "$M4/u300/Assets" --rules M-4
+# A warning and a violation in one run, then a short file after them: each file is counted alone.
+gen_assets "$M4/mixed" "_Project/Modules/Gameplay/Runtime/A.cs" 401
+gen_assets "$M4/mixed" "_Project/Modules/Gameplay/Runtime/B.cs" 301
+gen_assets "$M4/mixed" "_Project/Modules/Gameplay/Runtime/C.cs" 5
+assert_exit 1 "$CHECK" --root "$M4/mixed/Assets" --rules M-4
+assert_output_contains "M-4 Assets/_Project/Modules/Gameplay/Runtime/A.cs 401 lines" "$CHECK" --root "$M4/mixed/Assets" --rules M-4
+assert_output_contains "WARN M-4 Assets/_Project/Modules/Gameplay/Runtime/B.cs 301 lines" "$CHECK" --root "$M4/mixed/Assets" --rules M-4
+assert_exit 0 output_lacks "C.cs" "$CHECK" --root "$M4/mixed/Assets" --rules M-4
+# Only .cs under _Project outside Tooling: not .uss, not other folders of Assets, not Tooling.
+gen_assets "$M4/out" "Other/Big.cs" 500
+gen_assets "$M4/out" "_Project/Modules/Tooling/Editor/Big.cs" 500
+gen_assets "$M4/out" "_Project/Styles/Big.uss" 500
+assert_exit 0 prints_nothing "$CHECK" --root "$M4/out/Assets" --rules M-4
+
+# M-5: scene lookups and singletons in runtime code, not in App, tests or editor code.
+M5F="$FIXTURES/fail/M-5/Assets"
+assert_output_contains "M-5 $CORE/UsesFind.cs:7 " "$CHECK" --root "$M5F" --rules M-5
+assert_output_contains "M-5 $CORE/Singleton.cs:5 " "$CHECK" --root "$M5F" --rules M-5
+
+m5() { run_one M-5 "Modules/Gameplay/Runtime/Core/T.cs" "$1"; }
+while IFS= read -r token; do
+  assert_exit 1 m5 "var x = $token;"
+  assert_exit 1 m5 "    var x = $token; // not a full-line comment"
+  assert_exit 0 m5 "    // $token"
+  assert_exit 0 m5 "    /// $token"
+done <<'EOF'
+FindObjectOfType<Foo>()
+FindFirstObjectByType<Foo>()
+FindAnyObjectByType<Foo>()
+Object.FindObjectOfType(typeof(Foo))
+GameObject.Find("Ui")
+GameObject.FindWithTag("Ui")
+Resources.Load<Foo>("x")
+Resources.LoadAll("x")
+EOF
+while IFS= read -r decl; do
+  assert_exit 1 m5 "$decl"
+done <<'EOF'
+public static T Instance { get; private set; }
+public static T Instance;
+static T Instance
+internal static Foo<Bar> Instance { get; }
+public static readonly T Instance = new T();
+public static Foo? Instance { get; set; }
+public static Bowling.Gameplay.Foo Instance { get; }
+public static T Instance=null;
+EOF
+while IFS= read -r decl; do
+  assert_exit 0 m5 "$decl"
+done <<'EOF'
+public T Instance { get; }
+public static T Instances { get; }
+public static T InstanceCount { get; }
+public static T GetInstance() { return null; }
+public static void Reset() { Instance = null; }
+// public static T Instance { get; }
+var t = typeof(GameObject);
+var x = Find("x");
+var y = GetComponentInChildren<Foo>();
+EOF
+# Where it applies: Modules/<X>/Runtime/ except Modules/App/.
+FIND='var x = FindObjectOfType<Foo>();'
+while IFS= read -r p; do
+  assert_exit 1 run_one M-5 "$p" "$FIND"
+done <<'EOF'
+Modules/Gameplay/Runtime/T.cs
+Modules/Gameplay/Runtime/Core/T.cs
+Modules/UI/Runtime/Components/Badge/T.cs
+Modules/Testing/Runtime/T.cs
+Modules/AppX/Runtime/T.cs
+EOF
+while IFS= read -r p; do
+  assert_exit 0 run_one M-5 "$p" "$FIND"
+done <<'EOF'
+Modules/App/Runtime/T.cs
+Modules/App/Runtime/Core/T.cs
+Modules/App/Editor/T.cs
+Modules/Gameplay/Editor/T.cs
+Modules/Gameplay/Editor/Runtime/T.cs
+Modules/Gameplay/Tests/EditMode/T.cs
+Modules/Gameplay/Tests/PlayMode/T.cs
+Scripts/T.cs
+EOF
+assert_exit 0 run_one M-5 Modules/Gameplay/Runtime/T.uss "$FIND"
+
+# M-6: .cs under _Project but outside Modules/.
+M6F="$FIXTURES/fail/M-6/Assets"
+assert_output_contains "M-6 Assets/_Project/Scripts/Loose.cs " "$CHECK" --root "$M6F" --rules M-6
+assert_exit 1 run_one M-6 T.cs 'public class T { }'
+assert_exit 1 run_one M-6 Scripts/Deep/Down/T.cs 'public class T { }'
+assert_exit 0 run_one M-6 Modules/Gameplay/Runtime/T.cs 'public class T { }'
+assert_exit 0 run_one M-6 Scripts/T.txt 'public class T { }'
+assert_exit 0 run_one M-6 Scripts/T.uss '.a { color: red; }'
+assert_exit 0 run_at M-6 Other/T.cs 'public class T { }'
+assert_exit 0 run_at M-6 Plugins/FMOD/T.cs 'public class T { }'
+
+# M-8, color literals: only in declaration values, and not in Styles/Tokens.uss.
+M8F="$FIXTURES/fail/M-8/Assets"
+CMP="_Project/Modules/UI/Runtime/Components"
+assert_output_contains "M-8 Assets/$CMP/Tile/Tile.uss:2 " "$CHECK" --root "$M8F" --rules M-8
+assert_output_contains "'#FF0000'" "$CHECK" --root "$M8F" --rules M-8
+assert_exit 0 output_lacks "Tile missing" "$CHECK" --root "$M8F" --rules M-8
+
+# uss <content> [path below Assets]: run M-8 on one .uss file.
+uss() { run_at M-8 "${2:-_Project/Styles/Hud.uss}" "$1"; }
+
+while IFS= read -r decl; do
+  assert_exit 1 uss ".a { $decl }"
+done <<'EOF'
+color: #FF0000;
+color: #f00;
+color: #f00f;
+color: #abcdef;
+color: #FF000080;
+color:#fff;
+color: rgb(1, 2, 3);
+color: rgba(1, 2, 3, 0.5);
+color: RGBA(1, 2, 3, 0.5);
+color: RGB(1,2,3);
+flex-grow: 1; color: #fff;
+border-color: red #fff;
+--x: #fff;
+EOF
+assert_exit 1 uss '.a{color:#fff}'
+assert_exit 1 uss '#badge-root:hover { color: #fff; }'
+assert_exit 1 uss '.a {
+    color:
+        #fff;
+}'
+assert_exit 1 uss '.a {
+    transition-property: color;
+    border-color: red,
+        #abc;
+}'
+assert_exit 1 uss '.a { background-image: url(project://database/x.png); color: #fff; }'
+assert_output_contains "M-8 Assets/_Project/Styles/Hud.uss:2 " uss '.a {
+    color: #fff;
+}'
+# Any .uss under Assets, and only Styles/Tokens.uss of the UI module is exempt.
+assert_exit 1 uss '.a { color: #fff; }' Menus/Menu.uss
+assert_exit 1 uss ':root { --c: #fff; }' _Project/Modules/UI/Runtime/Styles/Other.uss
+assert_exit 1 uss ':root { --c: #fff; }' _Project/Modules/UI/Runtime/Tokens.uss
+assert_exit 1 uss ':root { --c: #fff; }' _Project/Modules/Gameplay/Runtime/Styles/Tokens.uss
+assert_exit 0 uss ':root { --c: #fff; --d: rgb(1, 2, 3); --e: rgba(1, 2, 3, 0.5); }' _Project/Modules/UI/Runtime/Styles/Tokens.uss
+while IFS= read -r css; do
+  assert_exit 0 uss "$css"
+done <<'EOF'
+#badge-root { flex-grow: 1; }
+#add { flex-grow: 1; }
+#bad { flex-grow: 1; }
+#Cafe { flex-grow: 1; }
+#deadbe { flex-grow: 1; }
+.a:hover #bad { color: red; }
+.a #bad, .b #add { color: red; }
+.a { color: var(--color-primary); }
+.a { color: red; }
+.a { color: #abcde; }
+.a { color: #abcdefg; }
+.a { color: #ggg; }
+.a { width: #12; }
+.a { --x: argb(1); }
+/* .a { color: #fff; } */
+.a { color: red; /* #fff */ }
+// .a { color: #fff; }
+.a { -unity-font: url("project://database/Assets/a.ttf#fff"); }
+.a { -unity-font: url('project://database/Assets/a.ttf#fff'); }
+EOF
+assert_exit 0 uss '/*
+.a { color: #fff; }
+*/
+.b { color: red; }'
+assert_exit 1 uss '/* one */ .a { color: #fff; }'
+
+# Nothing carries over from one file to the next, even when a file ends inside a block or comment.
+LEAK="$(mktemp -d "$WORK/leak.XXXXXX")"
+mkdir -p "$LEAK/Assets/_Project/Modules/UI/Runtime"
+printf '%s\n' '.a { color: red;' > "$LEAK/Assets/_Project/Modules/UI/Runtime/A.uss"
+printf '%s\n' '.b:hover #bad { color: red; }' > "$LEAK/Assets/_Project/Modules/UI/Runtime/B.uss"
+printf '%s\n' '/* never closed' > "$LEAK/Assets/_Project/Modules/UI/Runtime/C.uss"
+printf '%s\n' '.d { color: #fff; }' > "$LEAK/Assets/_Project/Modules/UI/Runtime/D.uss"
+printf '%s\n' 'public class A {' > "$LEAK/Assets/_Project/Modules/UI/Runtime/A.cs"
+printf '%s\n' '/* never closed' > "$LEAK/Assets/_Project/Modules/UI/Runtime/C.cs"
+printf '%s\n' 'string s = @"never closed' > "$LEAK/Assets/_Project/Modules/UI/Runtime/E.cs"
+for name in B D F; do
+  printf '%s\n' "public class Wrong$name { }" > "$LEAK/Assets/_Project/Modules/UI/Runtime/$name.cs"
+done
+printf '%s\n' 'namespace Leak' > "$LEAK/Assets/_Project/Modules/UI/Runtime/G.cs"
+printf '%s\n' 'public class H { public class Nested { } }' > "$LEAK/Assets/_Project/Modules/UI/Runtime/H.cs"
+assert_output_contains "M-8 Assets/_Project/Modules/UI/Runtime/D.uss:1 " "$CHECK" --root "$LEAK/Assets" --rules M-8
+assert_exit 0 output_lacks "B.uss" "$CHECK" --root "$LEAK/Assets" --rules M-8
+assert_exit 0 output_lacks "H.cs" "$CHECK" --root "$LEAK/Assets" --rules M-3
+assert_output_contains "M-3 Assets/_Project/Modules/UI/Runtime/B.cs:1 " "$CHECK" --root "$LEAK/Assets" --rules M-3
+assert_output_contains "M-3 Assets/_Project/Modules/UI/Runtime/D.cs:1 " "$CHECK" --root "$LEAK/Assets" --rules M-3
+assert_output_contains "M-3 Assets/_Project/Modules/UI/Runtime/F.cs:1 " "$CHECK" --root "$LEAK/Assets" --rules M-3
+
+# M-8, component folders: <Name>.uxml, <Name>.uss and <Name>.cs, each from the Name folder.
+# m8_files <path below Assets>...: run M-8 on a tree of those files.
+m8_files() {
+  local dir
+  dir="$(mktemp -d "$WORK/m8.XXXXXX")"
+  mk_files "$dir" "$@"
+  "$CHECK" --root "$dir/Assets" --rules M-8 < /dev/null
+}
+assert_exit 0 m8_files "$CMP/Badge/Badge.uxml" "$CMP/Badge/Badge.uss" "$CMP/Badge/Badge.cs"
+assert_exit 0 m8_files "$CMP/Badge/Badge.uxml" "$CMP/Badge/Badge.uss" "$CMP/Badge/Badge.cs" \
+  "$CMP/Badge/Badge.uxml.meta" "$CMP/Badge/Helper.cs" "$CMP/Badge/Sub/Extra.cs" "$CMP/Badge.meta"
+assert_exit 0 m8_files "$CMP/My Badge/My Badge.uxml" "$CMP/My Badge/My Badge.uss" "$CMP/My Badge/My Badge.cs"
+assert_exit 1 m8_files "$CMP/Badge/Badge.uxml" "$CMP/Badge/Badge.cs"
+assert_output_contains "M-8 Assets/$CMP/Badge missing Badge.uss " m8_files "$CMP/Badge/Badge.uxml" "$CMP/Badge/Badge.cs"
+assert_output_contains "M-8 Assets/$CMP/Badge missing Badge.uxml " m8_files "$CMP/Badge/Badge.uss" "$CMP/Badge/Badge.cs"
+assert_output_contains "M-8 Assets/$CMP/Badge missing Badge.cs " m8_files "$CMP/Badge/Badge.uxml" "$CMP/Badge/Badge.uss"
+assert_output_contains "M-8 Assets/$CMP/My Badge missing My Badge.cs " m8_files "$CMP/My Badge/My Badge.uxml" "$CMP/My Badge/My Badge.uss"
+assert_exit 1 m8_files "$CMP/Badge/Other.cs"
+assert_output_contains "Badge missing Badge.uxml" m8_files "$CMP/Badge/Other.cs"
+assert_output_contains "Badge missing Badge.uss" m8_files "$CMP/Badge/Other.cs"
+assert_output_contains "Badge missing Badge.cs" m8_files "$CMP/Badge/Other.cs"
+# A wrong case, wrong names, and files in a sub-folder don't count.
+assert_output_contains "Badge missing Badge.uss" m8_files "$CMP/Badge/Badge.uxml" "$CMP/Badge/badge.uss" "$CMP/Badge/Badge.cs"
+assert_exit 1 m8_files "$CMP/Badge/Chip.uxml" "$CMP/Badge/Chip.uss" "$CMP/Badge/Chip.cs"
+assert_exit 1 m8_files "$CMP/Badge/Badge.uxml" "$CMP/Badge/Badge.cs" "$CMP/Badge/Sub/Badge.uss"
+assert_output_contains "Badge missing Badge.uss" m8_files "$CMP/Badge/Badge.uxml" "$CMP/Badge/Badge.cs" "$CMP/Badge/Badge.uss.meta"
+# Only the bad folder is reported.
+assert_exit 0 output_lacks "Badge missing" m8_files "$CMP/Badge/Badge.uxml" "$CMP/Badge/Badge.uss" "$CMP/Badge/Badge.cs" "$CMP/Chip/Chip.cs"
+assert_output_contains "Chip missing Chip.uxml" m8_files "$CMP/Badge/Badge.uxml" "$CMP/Badge/Badge.uss" "$CMP/Badge/Badge.cs" "$CMP/Chip/Chip.cs"
+# Not component folders: files directly in Components/, other modules, screens, the Editor folder.
+assert_exit 0 m8_files "$CMP/Readme.md" "$CMP/Loose.cs" "$CMP/Loose.meta"
+assert_exit 0 m8_files "_Project/Modules/Gameplay/Runtime/Components/Foo/Foo.cs"
+assert_exit 0 m8_files "_Project/Modules/UI/Runtime/Screens/HudScreen/HudScreen.uxml"
+assert_exit 0 m8_files "_Project/Modules/UI/Runtime/Styles/Tokens.uss"
+assert_exit 0 m8_files "_Project/Modules/UI/Editor/Components/Foo/Foo.cs"
+
+# ---------------------------------------------------------------------------------------------
 # Rule selection and the default rule set.
 # ---------------------------------------------------------------------------------------------
 assert_exit 0 "$CHECK" --root "$G2" --rules G-1
 assert_exit 1 "$CHECK" --root "$G2" --rules G-1,G-2
 assert_exit 1 "$CHECK" --root "$G2"
 assert_exit 1 "$CHECK" --root "$G1"
-assert_exit 0 "$CHECK" --root "$FIXTURES/pass/G-1/Assets"
 assert_exit 0 "$CHECK" --root "$FIXTURES/pass/G-3b/Assets"
+# Hud.uss in the G-1 pass fixture writes rgba() on purpose (a text-shadow case), which M-8 forbids
+# in any .uss but Tokens.uss. So G-1 is clean there and the default rule set is not.
+assert_exit 0 "$CHECK" --root "$FIXTURES/pass/G-1/Assets" --rules G-1,G-2,G-3,G-3b
+assert_output_contains "M-8 Assets/_Project/Styles/Hud.uss:" "$CHECK" --root "$FIXTURES/pass/G-1/Assets"
+# The SOT-2 text rules are part of the default set: the pass fixtures are clean under every rule,
+# the fail fixtures are not.
+for rule in M-3 M-5 M-6 M-8; do
+  assert_exit 0 "$CHECK" --root "$FIXTURES/pass/$rule/Assets"
+  assert_exit 1 "$CHECK" --root "$FIXTURES/fail/$rule/Assets"
+done
+assert_exit 1 "$CHECK" --root "$M4/l401/Assets"
+assert_exit 0 "$CHECK" --root "$M4/l301/Assets"
+assert_exit 0 "$CHECK" --root "$G2" --rules M-3,M-4,M-5,M-8
+assert_exit 1 "$CHECK" --root "$G2" --rules M-6
+assert_exit 0 "$CHECK" --root "$M3F" --rules M-4,M-5,M-6,M-8
+assert_exit 1 "$CHECK" --root "$M3F" --rules M-3,M-4
+# M-1, M-2 and M-7 are editor-layer rules, not part of this script.
+assert_exit 2 "$CHECK" --root "$G1" --rules M-7
+assert_output_contains "unknown rule: M-7" "$CHECK" --root "$G1" --rules M-7
 
 # Usage errors exit 2.
 assert_exit 2 "$CHECK"
@@ -286,6 +747,26 @@ copy_checks "$EL"
 : > "$EL/tools/checks/lib/rules_gradients.sh"
 assert_exit 2 "$EL/tools/checks/check_sources_of_truth.sh" --root "$G1"
 assert_output_contains "no rules loaded" "$EL/tools/checks/check_sources_of_truth.sh" --root "$G1"
+
+# The same for the SOT-2 library: without it M-3..M-8 would silently not run.
+NS="$SPACED/no structure repo"
+copy_checks "$NS"
+rm "$NS/tools/checks/lib/rules_structure.sh"
+assert_exit 2 "$NS/tools/checks/check_sources_of_truth.sh" --root "$G1"
+assert_output_contains "cannot load rules library" "$NS/tools/checks/check_sources_of_truth.sh" --root "$G1"
+assert_exit 2 "$NS/tools/checks/check_sources_of_truth.sh" --root "$FIXTURES/fail/M-6/Assets" --rules G-1
+
+ES="$SPACED/empty structure repo"
+copy_checks "$ES"
+: > "$ES/tools/checks/lib/rules_structure.sh"
+assert_exit 2 "$ES/tools/checks/check_sources_of_truth.sh" --root "$FIXTURES/fail/M-6/Assets"
+assert_output_contains "no rules loaded" "$ES/tools/checks/check_sources_of_truth.sh" --root "$FIXTURES/fail/M-6/Assets"
+
+BS="$SPACED/broken structure repo"
+copy_checks "$BS"
+printf 'rule_BROKEN() {\n' >> "$BS/tools/checks/lib/rules_structure.sh"
+assert_exit 2 "$BS/tools/checks/check_sources_of_truth.sh" --root "$FIXTURES/fail/M-6/Assets"
+assert_output_contains "cannot load rules library" "$BS/tools/checks/check_sources_of_truth.sh" --root "$FIXTURES/fail/M-6/Assets"
 
 # ---------------------------------------------------------------------------------------------
 # --all: scans unity/MotionBowling/Assets of the checkout the script lives in.
@@ -387,6 +868,128 @@ assert_exit 1 in_dir "$S" "$CHECK" --staged
 git -C "$S" add tools/checks/reviewed-shaders.txt
 assert_exit 0 in_dir "$S" "$CHECK" --staged
 
+# SOT-2 rules in staged mode: the staged copy of a file is what is judged.
+SR="$SPACED/structure repo"
+new_repo "$SR"
+put "$SR" "$UNITY/Scripts/Loose.cs" 'public class Loose { }'
+put "$SR" "$UNITY/Modules/Gameplay/Runtime/Core/Wrong.cs" 'public class Right { }'
+put "$SR" "$UNITY/Modules/Gameplay/Runtime/Core/Finder.cs" 'public class Finder { void F() { FindObjectOfType<Finder>(); } }'
+git -C "$SR" add -A
+assert_exit 1 in_dir "$SR" "$CHECK" --staged
+assert_output_contains "M-6 Assets/_Project/Scripts/Loose.cs " in_dir "$SR" "$CHECK" --staged
+assert_output_contains "M-3 Assets/_Project/Modules/Gameplay/Runtime/Core/Wrong.cs:1 " in_dir "$SR" "$CHECK" --staged
+assert_output_contains "M-5 Assets/_Project/Modules/Gameplay/Runtime/Core/Finder.cs:1 " in_dir "$SR" "$CHECK" --staged
+# A long file: 301 lines only warn (exit 0), 401 fail.
+LONG="$SPACED/long repo"
+new_repo "$LONG"
+put "$LONG" "$UNITY/Modules/Gameplay/Runtime/Core/Long.cs" "$(gen_lines 301)"
+git -C "$LONG" add -A
+assert_exit 0 in_dir "$LONG" "$CHECK" --staged
+assert_output_contains "WARN M-4 Assets/_Project/Modules/Gameplay/Runtime/Core/Long.cs 301 lines (soft limit 300)" in_dir "$LONG" "$CHECK" --staged
+put "$LONG" "$UNITY/Modules/Gameplay/Runtime/Core/Long.cs" "$(gen_lines 401)"
+git -C "$LONG" add -A
+assert_exit 1 in_dir "$LONG" "$CHECK" --staged
+assert_output_contains "M-4 Assets/_Project/Modules/Gameplay/Runtime/Core/Long.cs 401 lines (max 400)" in_dir "$LONG" "$CHECK" --staged
+
+# M-8 folder completeness in staged mode (ruling R6): every UI component folder with a staged file
+# is judged by the files it has in the index, not only by the staged ones.
+UI="$UNITY/Modules/UI/Runtime/Components"
+UI_MSG="Assets/_Project/Modules/UI/Runtime/Components"
+# put_component <repo> <name>: a complete component folder.
+put_component() {
+  put "$1" "$UI/$2/$2.uxml" '<ui:UXML xmlns:ui="UnityEngine.UIElements" />'
+  put "$1" "$UI/$2/$2.uss" '.a { flex-grow: 1; }'
+  put "$1" "$UI/$2/$2.cs" "public class ${2// /_} { }"
+}
+
+# A complete folder is committed; staging a change to just Badge.cs passes.
+CR="$SPACED/component repo"
+new_repo "$CR"
+put_component "$CR" Badge
+put_component "$CR" "My Badge"
+git -C "$CR" add -A
+git -C "$CR" commit -q -m init
+put "$CR" "$UI/Badge/Badge.cs" 'public class Badge { int _x; }'
+git -C "$CR" add "$UI/Badge/Badge.cs"
+assert_exit 0 in_dir "$CR" "$CHECK" --staged
+assert_exit 0 prints_nothing in_dir "$CR" "$CHECK" --staged
+# A folder name with a space (only M-8 is run: a type can't be named like "My Badge.cs").
+put "$CR" "$UI/My Badge/My Badge.cs" 'public class My_Badge { int _x; }'
+git -C "$CR" add "$UI/My Badge/My Badge.cs"
+assert_exit 0 prints_nothing in_dir "$CR" "$CHECK" --staged --rules M-8
+git -C "$CR" rm -q -f "$UI/My Badge/My Badge.uss"
+assert_output_contains "M-8 $UI_MSG/My Badge missing My Badge.uss " in_dir "$CR" "$CHECK" --staged --rules M-8
+# Deleting a file from the folder (staged) fails, even though no .cs/.uss/.uxml is staged otherwise.
+git -C "$CR" reset -q
+git -C "$CR" rm -q "$UI/Badge/Badge.uss"
+assert_exit 1 in_dir "$CR" "$CHECK" --staged
+assert_output_contains "M-8 $UI_MSG/Badge missing Badge.uss " in_dir "$CR" "$CHECK" --staged
+# The index is what counts: a file deleted only in the working tree is still there for the commit.
+git -C "$CR" reset -q --hard
+rm "$CR/$UI/Badge/Badge.uss"
+put "$CR" "$UI/Badge/Badge.cs" 'public class Badge { int _y; }'
+git -C "$CR" add "$UI/Badge/Badge.cs"
+assert_exit 0 in_dir "$CR" "$CHECK" --staged
+# Renaming the folder leaves Chip.* missing.
+git -C "$CR" reset -q --hard
+git -C "$CR" mv "$UI/Badge" "$UI/Chip"
+assert_exit 1 in_dir "$CR" "$CHECK" --staged
+assert_output_contains "M-8 $UI_MSG/Chip missing Chip.uxml " in_dir "$CR" "$CHECK" --staged
+# Moving a file out of the folder (git shows a rename; the old folder is still touched).
+git -C "$CR" reset -q --hard
+mkdir -p "$CR/$UNITY/Styles"
+git -C "$CR" mv "$UI/Badge/Badge.uss" "$UNITY/Styles/Badge.uss"
+assert_exit 1 in_dir "$CR" "$CHECK" --staged
+assert_output_contains "M-8 $UI_MSG/Badge missing Badge.uss " in_dir "$CR" "$CHECK" --staged
+# Deleting the whole folder is fine.
+git -C "$CR" reset -q --hard
+git -C "$CR" rm -r -q "$UI/Badge"
+assert_exit 0 in_dir "$CR" "$CHECK" --staged
+assert_exit 0 prints_nothing in_dir "$CR" "$CHECK" --staged
+
+# A new folder with only Badge.uxml and Badge.cs fails, with the missing file named.
+NB="$SPACED/new component repo"
+new_repo "$NB"
+put "$NB" "$UI/Badge/Badge.uxml" '<ui:UXML xmlns:ui="UnityEngine.UIElements" />'
+put "$NB" "$UI/Badge/Badge.cs" 'public class Badge { }'
+git -C "$NB" add -A
+assert_exit 1 in_dir "$NB" "$CHECK" --staged
+assert_output_contains "M-8 $UI_MSG/Badge missing Badge.uss " in_dir "$NB" "$CHECK" --staged
+# A file that exists only in the working tree doesn't complete the folder.
+put "$NB" "$UI/Badge/Badge.uss" '.a { flex-grow: 1; }'
+assert_exit 1 in_dir "$NB" "$CHECK" --staged
+git -C "$NB" add "$UI/Badge/Badge.uss"
+assert_exit 0 in_dir "$NB" "$CHECK" --staged
+
+# Folders that no staged file touches are not judged: an incomplete folder already in the index
+# stays quiet while a complete one is changed. (M-8 in --all mode still reports it.)
+OLD="$SPACED/old component repo"
+new_repo "$OLD"
+put "$OLD" "$UI/Old/Old.cs" 'public class Old { }'
+put_component "$OLD" Fresh
+git -C "$OLD" add -A
+git -C "$OLD" commit -q -m init
+put "$OLD" "$UI/Fresh/Fresh.cs" 'public class Fresh { int _x; }'
+git -C "$OLD" add "$UI/Fresh/Fresh.cs"
+assert_exit 0 prints_nothing in_dir "$OLD" "$CHECK" --staged
+put "$OLD" "$UI/Old/Old.cs" 'public class Old { int _x; }'
+git -C "$OLD" add "$UI/Old/Old.cs"
+assert_exit 1 in_dir "$OLD" "$CHECK" --staged
+assert_output_contains "M-8 $UI_MSG/Old missing Old.uxml " in_dir "$OLD" "$CHECK" --staged
+assert_exit 0 output_lacks "Fresh" in_dir "$OLD" "$CHECK" --staged
+
+# A staged color literal in a .uss is found; the same value in Tokens.uss is not.
+CL="$SPACED/color repo"
+new_repo "$CL"
+put "$CL" "$UNITY/Modules/UI/Runtime/Styles/Tokens.uss" ':root { --color-primary: #FF0000; }'
+put "$CL" "$UNITY/Modules/UI/Runtime/Styles/Hud.uss" '.a { color: var(--color-primary); }'
+git -C "$CL" add -A
+assert_exit 0 prints_nothing in_dir "$CL" "$CHECK" --staged
+put "$CL" "$UNITY/Modules/UI/Runtime/Styles/Hud.uss" '.a { color: #FF0000; }'
+git -C "$CL" add -A
+assert_exit 1 in_dir "$CL" "$CHECK" --staged
+assert_output_contains "M-8 Assets/_Project/Modules/UI/Runtime/Styles/Hud.uss:1 " in_dir "$CL" "$CHECK" --staged
+
 # ---------------------------------------------------------------------------------------------
 # install-hooks.sh and the pre-commit hook.
 # ---------------------------------------------------------------------------------------------
@@ -415,12 +1018,23 @@ git -C "$H" add "$UNITY/a.uss"
 assert_exit 0 git -C "$H" commit -q -m clean
 assert_exit 0 test "$(git -C "$H" rev-list --count HEAD)" = 2
 
+# A warning (a 301-line file, M-4) is printed but doesn't block the commit; a 401-line file does.
+LONG_CS="$UNITY/Modules/Gameplay/Runtime/Core/Long.cs"
+put "$H" "$LONG_CS" "$(gen_lines 401)"
+git -C "$H" add "$LONG_CS"
+assert_exit 1 git -C "$H" commit -q -m toolong
+assert_output_contains "M-4 Assets/_Project/Modules/Gameplay/Runtime/Core/Long.cs 401 lines (max 400)" git -C "$H" commit -q -m toolong
+put "$H" "$LONG_CS" "$(gen_lines 301)"
+git -C "$H" add "$LONG_CS"
+assert_output_contains "WARN M-4 Assets/_Project/Modules/Gameplay/Runtime/Core/Long.cs 301 lines" git -C "$H" commit -q -m warned
+assert_exit 0 test "$(git -C "$H" rev-list --count HEAD)" = 3
+
 # Script absent (a checkout without the checks, such as main before the merge): skip and pass.
 rm "$H/tools/checks/check_sources_of_truth.sh"
 put "$H" "$UNITY/a.uss" "$BAD_USS"
 git -C "$H" add "$UNITY/a.uss"
 assert_output_contains "source-of-truth checks not present in this checkout; skipping" git -C "$H" commit -q -m skipped
-assert_exit 0 test "$(git -C "$H" rev-list --count HEAD)" = 3
+assert_exit 0 test "$(git -C "$H" rev-list --count HEAD)" = 4
 
 # A git worktree shares the hooks directory of its main checkout (git rev-parse --git-path hooks).
 W="$SPACED/main checkout"

@@ -17,7 +17,9 @@
 #
 # Adding a rule: write rule_<id with - as _> in a lib/rules_*.sh file, append the id to ALL_RULES
 # there, and load it with load_rules below. A rule prints its violation lines. It finds files with
-# list_files and scans them in batches with run_awk or scan_tokens.
+# list_files and scans them in batches with run_awk or scan_tokens. A rule that judges a whole
+# folder asks tree_files for the folder's files and touched_files for the ones this run changed.
+# The last statement of a lib must succeed (end it with the ALL_RULES assignment).
 #
 # Written for macOS system bash 3.2 and BSD grep/awk/sed: no bash 4 features, no GNU-only flags.
 set -u
@@ -38,19 +40,18 @@ usage() {
   echo "usage: check_sources_of_truth.sh --all | --staged | --root <AssetsDir> [--rules <id,id>] [--reviewed <file>]"
 }
 
-# A rules library that doesn't load means rules that never run, so the checks would pass
-# without checking anything. Fail loudly instead (exit 2).
+# A rules library that doesn't load, or that registers no rules, means rules that never run, so
+# the checks would pass without checking anything. Fail loudly instead (exit 2).
 load_rules() {
+  local before="$ALL_RULES"
   # shellcheck disable=SC1090
   source "$CHECKS_DIR/lib/$1.sh" || die "cannot load rules library $CHECKS_DIR/lib/$1.sh"
+  [ "$ALL_RULES" != "$before" ] || die "no rules loaded from $CHECKS_DIR/lib/$1.sh"
 }
 
 ALL_RULES=""
 load_rules rules_gradients
-case "$ALL_RULES" in
-  *[![:space:]]*) ;;
-  *) die "no rules loaded" ;;
-esac
+load_rules rules_structure
 
 # ---------------------------------------------------------------------------------------------
 # Arguments
@@ -128,10 +129,15 @@ snapshot_staged() {
     set -- "$@" "$UNITY_ASSETS/*.$ext"
   done
   git diff --cached --name-only -z --diff-filter=ACMR -- "$@" > "$TMP/staged.list" || die "git diff failed"
-  [ -s "$TMP/staged.list" ] || exit 0
-  mkdir "$TMP/snapshot"
-  git checkout-index --prefix="$TMP/snapshot/" -z --stdin < "$TMP/staged.list" || die "git checkout-index failed"
+  # Every staged change to such a file, deletions and the old side of a rename included. A folder
+  # rule (M-8) has to look again at a folder that lost a file; touched_files reads this list.
+  git diff --cached --name-only -z --no-renames -- "$@" > "$TMP/touched.list" || die "git diff failed"
+  [ -s "$TMP/staged.list" ] || [ -s "$TMP/touched.list" ] || exit 0
   ROOT="$TMP/snapshot/$UNITY_ASSETS"
+  mkdir -p "$ROOT"
+  if [ -s "$TMP/staged.list" ]; then
+    git checkout-index --prefix="$TMP/snapshot/" -z --stdin < "$TMP/staged.list" || die "git checkout-index failed"
+  fi
   git show ":tools/checks/reviewed-shaders.txt" > "$TMP/reviewed-staged.txt" 2>/dev/null || : > "$TMP/reviewed-staged.txt"
   REVIEWED="$TMP/reviewed-staged.txt"
 }
@@ -156,28 +162,61 @@ case "$MODE" in
 esac
 [ -z "$REVIEWED_ARG" ] || REVIEWED="$REVIEWED_ARG"
 
-# FILE_LIST: every file under ROOT, relative to it, minus the excluded folders: Tooling holds the
-# banned patterns as data, FMOD is vendor code. (tools/checks and Packages are outside Assets.)
+# drop_excluded: a filter that removes the excluded folders from a list of paths relative to ROOT:
+# Tooling holds the banned patterns as data, FMOD is vendor code. (tools/checks and Packages are
+# outside Assets.)
+drop_excluded() {
+  grep -v -e '^_Project/Modules/Tooling/' -e '^Plugins/FMOD/'
+}
+
+# FILE_LIST: every file under ROOT (in staged mode: every staged file), relative to it.
 FILE_LIST="$TMP/files.txt"
-(cd "$ROOT" && find . -type f | sed 's|^\./||' | sort) \
-  | grep -v -e '^_Project/Modules/Tooling/' -e '^Plugins/FMOD/' > "$FILE_LIST"
+(cd "$ROOT" && find . -type f | sed 's|^\./||' | sort) | drop_excluded > "$FILE_LIST"
 
 # ---------------------------------------------------------------------------------------------
 # Helpers for the rules
 # ---------------------------------------------------------------------------------------------
 
 # list_files <scope> "<ext> <ext>...": the files with these extensions, relative to ROOT.
-# Scope "project" is Assets/_Project only; "assets" is all of Assets.
+# Scope "project" is Assets/_Project only; "assets" is all of Assets; "runtime" is the runtime code
+# of the modules, Assets/_Project/Modules/<Module>/Runtime/, except Modules/App/.
 list_files() {
   local scope="$1" exts="$2" ext re=""
   for ext in $exts; do
     re="$re${re:+|}$ext"
   done
-  if [ "$scope" = project ]; then
-    grep -E "^_Project/.*[.]($re)\$" "$FILE_LIST"
+  case "$scope" in
+    project) grep -E "^_Project/.*[.]($re)\$" "$FILE_LIST" ;;
+    runtime)
+      grep -E "^_Project/Modules/[^/]+/Runtime/.*[.]($re)\$" "$FILE_LIST" | grep -v '^_Project/Modules/App/'
+      ;;
+    *) grep -E "[.]($re)\$" "$FILE_LIST" ;;
+  esac
+}
+
+# tree_files <folder>: every file in the folder (below ROOT, no trailing slash), as it will be
+# committed. In staged mode that is the index, not only the staged files: a rule that judges a
+# whole folder needs the files that are already committed. A file staged for deletion is not in the
+# index, so it isn't listed. Returns 1 if the list can't be made.
+tree_files() {
+  if [ "$MODE" = staged ]; then
+    git ls-files -z -- "$UNITY_ASSETS/$1/" > "$TMP/tree.tmp" || return 1
+    tr '\0' '\n' < "$TMP/tree.tmp" | sed "s|^$UNITY_ASSETS/||" | drop_excluded
   else
-    grep -E "[.]($re)\$" "$FILE_LIST"
+    awk -v p="$1/" 'index($0, p) == 1' "$FILE_LIST"
   fi
+  return 0
+}
+
+# touched_files <folder>: the files in the folder that this run is about. Outside staged mode that
+# is every file; in staged mode it is every file with a staged change of any kind (see snapshot_staged).
+touched_files() {
+  if [ "$MODE" = staged ]; then
+    tr '\0' '\n' < "$TMP/touched.list" | sed "s|^$UNITY_ASSETS/||" | awk -v p="$1/" 'index($0, p) == 1' | drop_excluded
+  else
+    tree_files "$1"
+  fi
+  return 0
 }
 
 # run_awk <scope> "<exts>" <awk args...>: run awk over those files, in batches. awk runs from ROOT,

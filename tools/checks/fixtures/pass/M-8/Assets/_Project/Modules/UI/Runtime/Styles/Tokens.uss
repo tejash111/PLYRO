@@ -1,0 +1,7 @@
+:root {
+    --color-primary: #FF0000;
+    --color-surface: #fff;
+    --color-glow: #FF000080;
+    --color-overlay: rgba(0, 0, 0, 0.5);
+    --color-line: rgb(10, 20, 30);
+}

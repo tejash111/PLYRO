@@ -1,0 +1,8 @@
+#badge-root {
+    color: var(--color-primary);
+    flex-grow: 1;
+}
+.badge:hover #bad {
+    background-color: var(--color-surface);
+}
+#add { flex-grow: 1; }
