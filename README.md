@@ -2,7 +2,7 @@
 
 A walk-up 3D bowling game for macOS. Stand in front of the screen, swing your arm like a real bowler, and the ball rolls down the lane. Body tracking uses MediaPipe Pose through a native macOS plugin. The game is built in Unity 6.
 
-Status: **project foundation implemented, on branch `worktree-foundation`.** The specs in `docs/superpowers/specs/` are approved, and implementation plans go in `docs/superpowers/plans/`. The foundation (spec 1) is built there: the Unity project, the module skeleton, Contracts, the test fakes, the source-of-truth validators, and `tools/ci/verify.sh`. The other sub-projects (specs 2 to 9) are not started.
+Status: **sub-project 1 (project foundation) is implemented.** It is the Unity project, the module skeleton, Contracts, the test fakes, the source-of-truth validators, and `tools/ci/verify.sh`. The remaining sub-projects are specified in `docs/superpowers/specs/` and planned one at a time, each plan going in `docs/superpowers/plans/`.
 
 ## Where to start
 

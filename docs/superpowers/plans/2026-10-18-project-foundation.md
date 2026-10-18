@@ -705,6 +705,20 @@ Where a task's text below disagrees with one of these rulings, the ruling wins.
 - **R22:** gameplay event order: every transition assigns `Current` first, then raises `StateChanged`, then `SnapshotChanged`; for a scored roll the order is `StateChanged(Scoring)`, `RollScored`, `SnapshotChanged` (gameplay spec sections 4 and 6).
 - **R23:** Task 16 Step 3 runs on a `git archive HEAD` copy, not on `git worktree add`: `D="$(mktemp -d)/mb verify"; mkdir -p "$D"; git archive HEAD | tar -x -C "$D"`, then `bash tools/ci/verify.sh` from inside `$D` (the path has a space on purpose). The archive has no `.git`, so `verify.sh` must not depend on the repo's git. `verify.yml` sets `timeout-minutes: 90`, `runs-on: [self-hosted, macOS, ARM64]`, checks out with `lfs: true`, and uploads `unity/MotionBowling/Logs/ci/` with `if: always()`.
 - **R24:** the step 3 `warning CS` gate must not pass vacuously on a warm `Library/`. Before the Unity call, `step_validate` deletes `unity/MotionBowling/Library/ScriptAssemblies` and `unity/MotionBowling/Library/Bee` (quoted, only those), which forces a full script recompile on every run. Also: `verify.yml` gets `permissions: contents: read`; `docs/dev-setup.md` warns that the self-hosted runner holds a Unity license and runs repository code, so it is for private repositories (or fork pull requests need maintainer approval); the README status line is brought up to date.
+- **R25:** the text-rule holes are closed (foundation spec section 8). M-6 covers every `.cs` under `Assets/` (module asmdef folders only), G-2 scans all of `Assets/` and adds the constructor forms, `.endColor =`, `FilmGrain` and `Bloom`, G-1 rejects a `var()` in the first three tokens of a `text-shadow`, Tooling is excluded from the G rules only (M-3, M-4, M-5, M-6 and M-8 judge it), G-6's default root is all of `Assets/_Project`, and M-1 rejects `.asmref` files under `Modules/` and `.asmdef` files outside it. This supersedes the scopes in Tasks 6, 7, 8 and 11.
+- **R26:** the results gate also fails on any inconclusive test (`check_test_results.sh`), and tests use `Assert`, never `Assume`.
+
+### Hand-off to later sub-projects
+
+Things the foundation leaves open, for whoever plans the next sub-projects:
+
+- `FakeGameEvents` can't interleave `RollScored` between `StateChanged` and `SnapshotChanged`. Gameplay tests that need the R22 order need a split control (for example a fake that publishes the state and the snapshot in separate calls).
+- `Bowling.App.Tests.*` can't reference `Bowling.App.Editor` (`$module` in `module-rules.json` means the runtime assembly). Add a module-rules entry if build-script tests are needed.
+- Text-check performance: `check_sources_of_truth.sh --all` took about 3.6 s on 1000 synthetic files. Staged runs are fast. Watch it as the codebase grows (the spec's budget for the hook is 2 s).
+- The Main Camera has no `AudioListener`. The presentation/FMOD sub-project adds it.
+- The Mac IL2CPP module is not installed on the dev Mac. The platform/release sub-project needs it.
+- `.github/workflows/verify.yml` has never run on a real runner. Register a self-hosted Apple Silicon runner and activate the Unity licence (`docs/dev-setup.md`, "CI runner").
+- `com.unity.ide.visualstudio` is not in `Packages/manifest.json`, so Unity generates no `.csproj`/`.sln` and the `csharp-lsp` plugin has no project to read. `PackageManifestRules` allows the package. Add it when IDE support is wanted.
 
 ### Task 16: verify.sh, required files, CI and acceptance
 

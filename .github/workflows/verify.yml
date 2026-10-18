@@ -1,9 +1,19 @@
-# Runs tools/ci/verify.sh, the single verification entry point, on every push and pull request.
+# Runs tools/ci/verify.sh, the single verification entry point, on every push to main and on every
+# pull request (a branch with an open pull request is verified once, as the pull request, not twice).
 # It needs a self-hosted Apple Silicon Mac with Unity activated and the pinned editor installed;
 # docs/dev-setup.md, "CI runner", lists what the runner needs.
 name: verify
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# One run per ref: a newer push to the same branch or pull request cancels the run that is still going,
+# which matters because every run holds the one Unity editor of the self-hosted runner for minutes.
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
 
 # The job only reads the repository. This also limits what the token can do if a workflow run is abused.
 permissions:

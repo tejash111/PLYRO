@@ -72,7 +72,7 @@ The driver path contains the editor version, so run these again after the pinned
 
 ## Pre-commit hook
 
-The pre-commit hook runs the source-of-truth validators on staged files. Install it once per clone:
+The pre-commit hook runs the source-of-truth text rules (`tools/checks/check_sources_of_truth.sh --staged`) on staged files only. It does not run the editor rules (M-1, M-2, M-7 and G-4 to G-6), which need Unity: they run in step 3 of `bash tools/ci/verify.sh`. Install the hook once per clone:
 
 ```bash
 bash tools/checks/install-hooks.sh
@@ -101,7 +101,7 @@ Step 3 judges the editor log, and Unity logs compiler output only for the assemb
 
 ### CI runner
 
-`.github/workflows/verify.yml` runs `bash tools/ci/verify.sh` on every push and pull request, on a runner labelled `self-hosted`, `macOS` and `ARM64` (GitHub adds these labels to a self-hosted Apple Silicon Mac when you register it). The job times out after 90 minutes. Afterwards it uploads `unity/MotionBowling/Logs/ci/` as the artifact `unity-ci-logs`, also when verify failed.
+`.github/workflows/verify.yml` runs `bash tools/ci/verify.sh` on every push to `main` and on every pull request (a branch with an open pull request runs once, not twice), on a runner labelled `self-hosted`, `macOS` and `ARM64` (GitHub adds these labels to a self-hosted Apple Silicon Mac when you register it). The job times out after 90 minutes, and a newer run for the same ref (a new push to a branch or pull request) cancels the one still going. Afterwards it uploads `unity/MotionBowling/Logs/ci/` as the artifact `unity-ci-logs`, also when verify failed.
 
 Set up the runner machine once, as the user that runs the GitHub Actions runner service:
 
@@ -110,13 +110,13 @@ Set up the runner machine once, as the user that runs the GitHub Actions runner 
 3. Register the machine as a self-hosted runner in the GitHub repository settings (Actions, Runners).
 4. Don't open the project in the Unity editor on the runner. Two editors can't open one project, and verify.sh would then fail its Unity steps.
 
-**Security.** The runner holds a Unity license and runs the repository's code (`verify.sh` and the Unity editor scripts of the branch under test) on your Mac. Use it only for a private repository, or, if the repository is public, require maintainer approval before workflows run for pull requests from forks (repository settings, Actions, General, "Fork pull request workflows"). The workflow itself asks for read-only repository access (`permissions: contents: read`).
+**Security.** The runner holds a Unity license and runs the repository's code (`verify.sh` and the Unity editor scripts of the branch under test) on your Mac. Use it only for a private repository, or, if the repository is public, require maintainer approval before workflows run for pull requests from forks (repository settings, Actions, General, "Fork pull request workflows"). The workflow itself asks for read-only repository access (`permissions: contents: read`). Its actions (`actions/checkout`, `actions/upload-artifact`) are pinned by tag, not by commit SHA; pinning them to a SHA is a follow-up, worth doing before the runner serves anything but trusted branches.
 
 `actions/checkout` removes untracked and ignored files before it fetches, and `Library/` is ignored, so every CI run imports the project from scratch. That is slow. Setting `clean: false` on the checkout step would keep `Library/` and speed runs up; the warning check still sees a full compile, because step 3 deletes the compiled scripts itself (see above).
 
 ## Expected Unity console notes
 
-Unity logs `Assembly for Assembly Definition File '...' will not be compiled, because it has no scripts associated with it.` for every module assembly that has no code yet (at the moment, the test assemblies and `Bowling.App.Editor`). This is expected. These are Unity console notes, not compiler warnings, so they don't count against the zero `warning CS` gate. Each note goes away when its assembly gets its first script.
+Unity logs `Assembly for Assembly Definition File '...' will not be compiled, because it has no scripts associated with it.` for every assembly that has no code yet. At the moment these are the module test assemblies that have no scripts yet, 10 of them (BowlingPhysics, Presentation and UI each have EditMode and PlayMode, and Gameplay, Platform, PoseInput and ThrowDetection have EditMode). `Bowling.App.Editor` now has a script, so it no longer logs one. These notes are expected. They are Unity console notes, not compiler warnings, so they don't count against the zero `warning CS` gate. Each note goes away when its assembly gets its first script.
 
 ## Serialized PlayerSettings keys
 
