@@ -75,3 +75,36 @@ The pre-commit hook runs the source-of-truth validators on staged files. Install
 ```bash
 bash tools/checks/install-hooks.sh
 ```
+
+## Unity command-line helpers
+
+`tools/ci/unity.sh` finds the pinned editor and runs it headless against `unity/MotionBowling`. `tools/ci/run_unity_tests.sh` runs one test platform on top of it. Both find the repo from their own location, so any working directory works. All of these environment variables are optional:
+
+| Variable | Meaning |
+|---|---|
+| `UNITY_EDITOR` | Full path of the editor binary. Wins over the lookup below, and must be an executable file. |
+| `UNITY_HUB_EDITORS_DIR` | Where Unity Hub installs editors. Default `/Applications/Unity/Hub/Editor`. The editor is `<dir>/<ver>/Unity.app/Contents/MacOS/Unity`. |
+| `UNITY_PROJECT_DIR` | Absolute path of the Unity project. Default: `unity/MotionBowling` in this repo. |
+| `UNITY_LOG_NAME` | Name of the editor log, written to `<project>/Logs/ci/<name>.log` (gitignored). Default `run` for `unity.sh`, and the platform name (`EditMode` or `PlayMode`) for `run_unity_tests.sh`. |
+
+`<ver>` is the version in `ProjectSettings/ProjectVersion.txt` once the project exists, else `tools/ci/unity-version.txt`. If the two differ, the scripts exit 2 with an error. Run `tools/ci/unity.sh path` to see which editor would run.
+
+If the editor is killed at once (exit 137, `Killed: 9`, empty log), the install is damaged: macOS kills a binary whose code signature doesn't verify. Check with `codesign --verify --strict <editor>/Unity.app` and reinstall the editor from Unity Hub. Unity Hub on Apple Silicon can also install into `<ver>-arm64` instead of `<ver>`. In that case point `UNITY_EDITOR` at `.../<ver>-arm64/Unity.app/Contents/MacOS/Unity`.
+
+## Serialized PlayerSettings keys
+
+Some settings have no public `PlayerSettings` API, so the baseline code reads and writes them by their serialized key. These are the exact keys in `unity/MotionBowling/ProjectSettings/ProjectSettings.asset` as written by Unity 6000.3.26f1 into a fresh project. They are top-level fields of the `PlayerSettings` document (`--- !u!129 &1`), so `FindProperty("<key>")` takes the bare name.
+
+| Key | Fresh value | Type | Meaning |
+|---|---|---|---|
+| `cameraUsageDescription` | empty | string | Text of the camera permission prompt. |
+| `macOSTargetOSVersion` | empty | string | Minimum macOS version of the built player. Empty means Unity's default. |
+| `activeInputHandler` | `0` | int | Active Input Handling: `0` Input Manager (old), `1` Input System (new) only, `2` both. |
+
+Found with:
+
+```bash
+grep -nE "cameraUsageDescription|macOSTargetOSVersion|activeInputHandler" unity/MotionBowling/ProjectSettings/ProjectSettings.asset
+```
+
+All three exist under these exact names, so no substitutes were needed. The line numbers in that output (328, 332 and 682) belong to this Unity version and shift between versions, so look the keys up by name.
