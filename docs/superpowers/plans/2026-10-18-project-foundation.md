@@ -703,3 +703,36 @@ Where a task's text below disagrees with one of these rulings, the ruling wins.
 - **R21b:** `Disarm` raises `PhaseChanged` when the phase changes.
 - **R21c:** `SetBumpers` throws while rolling, `Reject` throws when disarmed, and `RaiseMilestone` accepts only `EnteredGutter`, `ReachedPins` and `EnteredPit`, and only while rolling.
 - **R22:** gameplay event order: every transition assigns `Current` first, then raises `StateChanged`, then `SnapshotChanged`; for a scored roll the order is `StateChanged(Scoring)`, `RollScored`, `SnapshotChanged` (gameplay spec sections 4 and 6).
+- **R23:** Task 16 Step 3 runs on a `git archive HEAD` copy, not on `git worktree add`: `D="$(mktemp -d)/mb verify"; mkdir -p "$D"; git archive HEAD | tar -x -C "$D"`, then `bash tools/ci/verify.sh` from inside `$D` (the path has a space on purpose). The archive has no `.git`, so `verify.sh` must not depend on the repo's git. `verify.yml` sets `timeout-minutes: 90`, `runs-on: [self-hosted, macOS, ARM64]`, checks out with `lfs: true`, and uploads `unity/MotionBowling/Logs/ci/` with `if: always()`.
+
+### Task 16: verify.sh, required files, CI and acceptance
+
+Commit `ci: verify.sh single entry point and GitHub Actions workflow`. `tools/ci/verify.sh` runs the six steps of the spec (section 9) in order, prints `== step N: <name> ==` first, stops at the first failure with that step's exit code (and `VERIFY FAILED at step N: ...` on stderr), and ends with `VERIFY OK`. Unity 6000.3.26f1.
+
+**Duration of `verify.sh`**
+
+| Run | Library | Time |
+|---|---|---|
+| This worktree (twice, once before and once after the manual checks) | warm | 65 s and 66 s |
+| Clean checkout: `git archive HEAD` into `<tmp>/mb verify` (R23) | none (cold import and full compile) | 94 s |
+
+The brief expected a slow first import (it bounded the run at about 40 minutes); on this Mac (Apple Silicon, 16 GB) the whole run from a fresh copy, import included, took 94 s. A slower machine, or one that has to download the packages, will take longer; the workflow's job limit is 90 minutes. The clean copy was deleted afterwards.
+
+**Acceptance criteria (spec section 11)**
+
+1. Compiles with zero errors and zero `warning CS` in `_Project`: in the clean-checkout run, `validate.log` (the first editor run in that fresh project, so the log of the full compile; 907 KB against 58 KB for a warm run) has 0 `warning CS` and 0 `error CS` lines, and `Library/ScriptAssemblies/` held every `Bowling.*.dll`, compiled in that run. The log has ten `Assembly for Assembly Definition File ... will not be compiled, because it has no scripts` notes, which are expected (`docs/dev-setup.md`) and are not compiler warnings. To show the gate catches real Unity output, a throw-away `int unused;` in `Bowling.Contracts` (in the disposable copy only) produced `Assets/_Project/Modules/Contracts/Runtime/ZzWarnProbe.cs(7,17): warning CS0168: ...` in `validate.log`, and `check_no_project_warnings` exited 1 on it.
+2. All 11 module folders exist (App, BowlingPhysics, Contracts, Gameplay, Platform, PoseInput, Presentation, Testing, ThrowDetection, Tooling, UI), each with `README.md` and its asmdefs. M-1 and M-2 pass: `Source-of-truth validation: 0 violation(s), 0 warning(s).` from `RunBatch` in the clean checkout.
+3. Contracts tests pass: `Bowling.Contracts.Tests.EditMode`, 29 of 29. (The whole EditMode run is 377 of 377: App 4, Contracts 29, Testing 132, Tooling 212. PlayMode is 4 of 4.)
+4. Validator tests pass: `Bowling.Tooling.Tests.EditMode`, 212 of 212 (the editor rules and the validator framework), and `tools/checks/test_checks.sh`, 553 assertions (the text rules, with a passing and a failing case per rule).
+5. Clean checkout, `bash tools/ci/verify.sh` from inside `<tmp>/mb verify`: steps 1 to 6, then `VERIFY OK`, exit 0.
+6. Manual: with `Assets/_Project/Modules/UI/Runtime/Styles/Bad.uss` (`.x { background-image: linear-gradient(red, blue); }`) staged, `git commit -m test` was rejected, exit 1, with `G-1 Assets/_Project/Modules/UI/Runtime/Styles/Bad.uss:1 banned gradient function: 'linear-gradient('`. The file was unstaged and deleted, and the empty `Styles/` folder (which this step created) removed.
+7. Manual: with `"Bowling.BowlingPhysics"` added to `Bowling.Gameplay.asmdef` `references`, `tools/ci/unity.sh exec Bowling.Tooling.Editor.SourceOfTruthValidator.RunBatch` exited 1 with `M-2 Assets/_Project/Modules/Gameplay/Runtime/Bowling.Gameplay.asmdef:6 references 'Bowling.BowlingPhysics', which module-rules.json does not allow Bowling.Gameplay to reference`. The asmdef was restored byte for byte (same blob hash), and `git status` was clean afterwards.
+
+**Not verified locally:** `.github/workflows/verify.yml` has not run. It needs a registered self-hosted Apple Silicon runner with an activated Unity license, and there is none here. It was only checked to be valid YAML with the intended `runs-on`, `timeout-minutes`, `lfs: true`, `bash tools/ci/verify.sh` and `if: always()` upload. `docs/dev-setup.md` ("Verify and CI") lists what the runner needs.
+
+**Deviations and notes**
+
+- Step 2 of `verify.sh` also runs a fourth suite, `tools/ci/test_verify.sh`, besides the three of the plan. It tests `verify.sh` against stub steps in a copied tree (step order, stopping at the first failure, exit codes, the warning check, required files), needs no Unity, and has no hook or switch in `verify.sh`. A mutation check (removing `UNITY_LOG_NAME=validate`, the stale-log delete, or the `Assets/_Project` filter) made it fail.
+- The clean-checkout run needs the new files in `HEAD`, so the commit was made before it and amended afterwards with these notes only.
+- The step 3 warning check can only judge what Unity logged. Unity logs compiler output for the assemblies it recompiles, so on a warm `Library/` (a local rerun, or an editor that already compiled the code) the log has nothing to judge. In CI, `actions/checkout` cleans ignored files, so each run is cold and the check sees the full compile (`docs/dev-setup.md`).
+- `verify.sh` takes no arguments (exit 2 if given any).

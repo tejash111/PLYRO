@@ -1,0 +1,29 @@
+# Runs tools/ci/verify.sh, the single verification entry point, on every push and pull request.
+# It needs a self-hosted Apple Silicon Mac with Unity activated and the pinned editor installed;
+# docs/dev-setup.md, "CI runner", lists what the runner needs.
+name: verify
+
+on: [push, pull_request]
+
+jobs:
+  verify:
+    runs-on: [self-hosted, macOS, ARM64]
+    # A cold Unity import of the whole project is slow; this is a ceiling, not an expectation.
+    timeout-minutes: 90
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Verify
+        run: bash tools/ci/verify.sh
+
+      # Even when verify.sh failed: the editor logs and the NUnit results say why.
+      - name: Upload Unity logs and test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unity-ci-logs
+          path: unity/MotionBowling/Logs/ci/
+          if-no-files-found: ignore

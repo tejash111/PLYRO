@@ -9,6 +9,23 @@ Status: **design approved; planning.** The specs in `docs/superpowers/specs/` ar
 1. Read [the system design](docs/superpowers/specs/2026-10-18-motion-bowling-system-design.md).
 2. Read [CLAUDE.md](CLAUDE.md) for the sources of truth and the workflow.
 
+## Verify
+
+```bash
+bash tools/ci/verify.sh
+```
+
+This is the single check for local runs and for CI. It stops at the first failure and ends with `VERIFY OK` (exit 0). The steps:
+
+1. Source-of-truth text checks (`tools/checks/check_sources_of_truth.sh --all`).
+2. The shell test suites: `tools/checks/test_checks.sh`, `tools/ci/test_ci_scripts.sh`, `tools/dev/test_check_env.sh` and `tools/ci/test_verify.sh`.
+3. The editor validators in Unity batch mode, and no `warning CS` from `Assets/_Project` in the editor log.
+4. Unity EditMode tests.
+5. Unity PlayMode tests.
+6. Every path in `tools/checks/required-files.txt` exists.
+
+Steps 3 to 5 start the Unity editor: close any Unity window that has `unity/MotionBowling` open first. A run in a fresh checkout imports the whole project and is slow. Logs and results go to `unity/MotionBowling/Logs/ci/`. The setup is in [docs/dev-setup.md](docs/dev-setup.md); the CI workflow is `.github/workflows/verify.yml`.
+
 ## Specs
 
 | # | Spec | Build order |

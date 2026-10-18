@@ -93,6 +93,24 @@ bash tools/checks/install-hooks.sh
 
 If an editor is killed at once (exit 137, `Killed: 9`, empty log), its install is damaged. See "Broken install" under "Unity Hub and editor".
 
+## Verify and CI
+
+`bash tools/ci/verify.sh` is the one command that checks everything (see the README, "Verify"). It runs from any working directory and needs no environment variables of its own; its Unity steps use the settings above. Its logs and test results are in `unity/MotionBowling/Logs/ci/`: `validate.log`, `EditMode.log`, `PlayMode.log`, `EditMode-results.xml` and `PlayMode-results.xml`.
+
+Step 3 judges the editor log, and Unity logs compiler output only for the assemblies it recompiles. If the code was already compiled (for example by an editor you had open), the log has no compiler output and the `warning CS` check has nothing to see. A fresh checkout compiles everything, so that is where acceptance criterion 1 (no `warning CS` in `Assets/_Project`) is really checked.
+
+### CI runner
+
+`.github/workflows/verify.yml` runs `bash tools/ci/verify.sh` on every push and pull request, on a runner labelled `self-hosted`, `macOS` and `ARM64` (GitHub adds these labels to a self-hosted Apple Silicon Mac when you register it). The job times out after 90 minutes. Afterwards it uploads `unity/MotionBowling/Logs/ci/` as the artifact `unity-ci-logs`, also when verify failed.
+
+Set up the runner machine once, as the user that runs the GitHub Actions runner service:
+
+1. Everything in this document: Xcode, Git LFS (the workflow checks out with `lfs: true`, so `git lfs` must be installed), Unity Hub with the pinned editor and the Mac IL2CPP module. Run `bash tools/dev/check-env.sh` there to confirm; it should print no `MISSING` line.
+2. Activate a Unity license for that user, outside the workflow: sign in to Unity Hub as the runner's user and activate the license. The workflow never handles license or account credentials.
+3. Register the machine as a self-hosted runner in the GitHub repository settings (Actions, Runners).
+4. Don't open the project in the Unity editor on the runner. Two editors can't open one project, and verify.sh would then fail its Unity steps.
+
+`actions/checkout` removes untracked and ignored files before it fetches, and `Library/` is ignored, so every CI run imports the project from scratch. That is slow, but it also means step 3 sees a full compile. Setting `clean: false` on the checkout step would keep `Library/` and speed runs up, at the cost of the warning check seeing only the assemblies recompiled in that run.
 ## Expected Unity console notes
 
 Unity logs `Assembly for Assembly Definition File '...' will not be compiled, because it has no scripts associated with it.` for every module assembly that has no code yet (at the moment, the test assemblies and `Bowling.App.Editor`). This is expected. These are Unity console notes, not compiler warnings, so they don't count against the zero `warning CS` gate. Each note goes away when its assembly gets its first script.
