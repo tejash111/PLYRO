@@ -1,0 +1,3 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <ui:VisualElement style="background-image: radial-gradient(circle, red, blue);" />
+</ui:UXML>

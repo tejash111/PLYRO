@@ -1,0 +1,21 @@
+#hud-root {
+    flex-grow: 1;
+}
+.score {
+    text-shadow: 2px 2px 0px black;
+}
+.hint {
+    text-shadow: 1px 1px black;
+}
+.flat {
+    text-shadow: 0 0 0 rgba(0, 0, 0, 0.5);
+}
+.hard {
+    text-shadow: rgba(0, 0, 0, 0.5) 4px 4px 0px;
+}
+.off {
+    text-shadow: none;
+}
+.fade {
+    transition-property: text-shadow;
+}

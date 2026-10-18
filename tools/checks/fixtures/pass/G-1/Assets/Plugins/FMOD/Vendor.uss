@@ -1,0 +1,3 @@
+.x {
+    background-image: linear-gradient(red, blue);
+}

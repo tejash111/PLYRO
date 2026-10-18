@@ -1,0 +1,6 @@
+# Fixture list: every shader under _Project is listed.
+
+Assets/_Project/Shaders/Flat.hlsl # reviewed by tejash on 2026-10-18: one flat color, no interpolation
+Assets/_Project/Shaders/Unlit.shader # reviewed by tejash on 2026-10-18: returns a uniform color
+   Assets/_Project/Shaders/Graph.shadergraph   # reviewed by tejash on 2026-10-18: no gradient nodes
+Assets/_Project/Shaders/Flat Color.shader # reviewed by tejash on 2026-10-18: path with a space

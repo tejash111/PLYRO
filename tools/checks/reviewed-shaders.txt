@@ -1,0 +1,5 @@
+# Shaders reviewed as gradient-free (SOT-1, rule G-3b).
+# Every .shader, .hlsl and .shadergraph under Assets/_Project must be listed here.
+# Format, one per line, with the path starting at Assets/:
+#   <path> # reviewed by <name> on <date>: <why gradient-free>
+# Blank lines and lines starting with # are ignored.
