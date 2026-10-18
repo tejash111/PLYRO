@@ -1,0 +1,25 @@
+{
+    "name": "Bowling.Testing.Tests.EditMode",
+    "rootNamespace": "Bowling.Testing.Tests",
+    "references": [
+        "Bowling.Testing",
+        "Bowling.Contracts",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

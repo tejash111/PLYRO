@@ -32,5 +32,6 @@ No Contracts interfaces and no MonoBehaviours. Public types only:
 - `Editor/Setup/`: project setup utilities (package installer, manifest rules, the project settings baseline and its rendering and scene parts).
 - `Editor/Validation/`: the rule framework (`Violation`, `IValidationRule`, `ValidationContext`, `ModuleRules`, `SourceOfTruthValidator`) and its internal asmdef helpers (`AsmdefFile`, `ExpectedAsmdef`, and `AsmdefReferenceResolver`, the one place a `GUID:` reference becomes an assembly name).
 - `Editor/Validation/Rules/`: the rules, one per file (`ModuleStructureRule`, `AsmdefReferenceRule`).
+- `Editor/Config/`: validator tuning assets (the G-6 heuristic thresholds). The folder is added with the validator that first needs it; no other `Editor/` folders are planned (foundation spec section 4.2). Tooling has no `Runtime/`.
 - `Tests/EditMode/`: EditMode tests for the module (`Bowling.Tooling.Tests.EditMode`).
 - `Tests/EditMode/Fixtures~/`: plain-file fixtures for the M-1 and M-2 tests (`M-1` and `M-2`, each with `pass` and `fail/<case>` folders). The `~` keeps Unity from importing them.

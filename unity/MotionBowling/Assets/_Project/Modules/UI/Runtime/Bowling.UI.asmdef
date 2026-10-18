@@ -1,0 +1,16 @@
+{
+    "name": "Bowling.UI",
+    "rootNamespace": "Bowling.UI",
+    "references": [
+        "Bowling.Contracts"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

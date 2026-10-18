@@ -1,0 +1,31 @@
+{
+    "name": "Bowling.App.Tests.PlayMode",
+    "rootNamespace": "Bowling.App.Tests",
+    "references": [
+        "Bowling.App",
+        "Bowling.Contracts",
+        "Bowling.PoseInput",
+        "Bowling.ThrowDetection",
+        "Bowling.BowlingPhysics",
+        "Bowling.Gameplay",
+        "Bowling.Presentation",
+        "Bowling.UI",
+        "Bowling.Platform",
+        "Bowling.Testing",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

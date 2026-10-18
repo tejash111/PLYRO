@@ -1,0 +1,26 @@
+{
+    "name": "Bowling.PoseInput.Tests.EditMode",
+    "rootNamespace": "Bowling.PoseInput.Tests",
+    "references": [
+        "Bowling.PoseInput",
+        "Bowling.Contracts",
+        "Bowling.Testing",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
