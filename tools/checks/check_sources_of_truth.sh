@@ -16,7 +16,7 @@
 # Exit codes: 0 clean (warnings allowed), 1 violations, 2 usage or internal error.
 #
 # Adding a rule: write rule_<id with - as _> in a lib/rules_*.sh file, append the id to ALL_RULES
-# there, and source that file below. A rule prints its violation lines. It finds files with
+# there, and load it with load_rules below. A rule prints its violation lines. It finds files with
 # list_files and scans them in batches with run_awk or scan_tokens.
 #
 # Written for macOS system bash 3.2 and BSD grep/awk/sed: no bash 4 features, no GNU-only flags.
@@ -38,9 +38,19 @@ usage() {
   echo "usage: check_sources_of_truth.sh --all | --staged | --root <AssetsDir> [--rules <id,id>] [--reviewed <file>]"
 }
 
+# A rules library that doesn't load means rules that never run, so the checks would pass
+# without checking anything. Fail loudly instead (exit 2).
+load_rules() {
+  # shellcheck disable=SC1090
+  source "$CHECKS_DIR/lib/$1.sh" || die "cannot load rules library $CHECKS_DIR/lib/$1.sh"
+}
+
 ALL_RULES=""
-# shellcheck source=lib/rules_gradients.sh
-source "$CHECKS_DIR/lib/rules_gradients.sh"
+load_rules rules_gradients
+case "$ALL_RULES" in
+  *[![:space:]]*) ;;
+  *) die "no rules loaded" ;;
+esac
 
 # ---------------------------------------------------------------------------------------------
 # Arguments

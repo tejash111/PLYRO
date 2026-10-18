@@ -265,6 +265,29 @@ assert_exit 2 "$X_CHECK" --root "$X_ROOT" --rules G-1
 assert_output_contains "rule G-1 failed to run" "$X_CHECK" --root "$X_ROOT" --rules G-1
 
 # ---------------------------------------------------------------------------------------------
+# Fail closed: a rules library that is missing, broken or empty is an error (exit 2), never a
+# pass. Without this the hook would let every commit through. G1 has a banned gradient in it.
+# ---------------------------------------------------------------------------------------------
+NL="$SPACED/no lib repo"
+mkdir -p "$NL/tools/checks"
+cp "$CHECK" "$NL/tools/checks/"
+assert_exit 2 "$NL/tools/checks/check_sources_of_truth.sh" --root "$G1"
+assert_output_contains "cannot load rules library" "$NL/tools/checks/check_sources_of_truth.sh" --root "$G1"
+assert_exit 2 "$NL/tools/checks/check_sources_of_truth.sh" --all
+
+SE="$SPACED/syntax error repo"
+copy_checks "$SE"
+printf 'rule_BROKEN() {\n' >> "$SE/tools/checks/lib/rules_gradients.sh"
+assert_exit 2 "$SE/tools/checks/check_sources_of_truth.sh" --root "$G1"
+assert_output_contains "cannot load rules library" "$SE/tools/checks/check_sources_of_truth.sh" --root "$G1"
+
+EL="$SPACED/empty lib repo"
+copy_checks "$EL"
+: > "$EL/tools/checks/lib/rules_gradients.sh"
+assert_exit 2 "$EL/tools/checks/check_sources_of_truth.sh" --root "$G1"
+assert_output_contains "no rules loaded" "$EL/tools/checks/check_sources_of_truth.sh" --root "$G1"
+
+# ---------------------------------------------------------------------------------------------
 # --all: scans unity/MotionBowling/Assets of the checkout the script lives in.
 # ---------------------------------------------------------------------------------------------
 MINI="$SPACED/mini repo"
