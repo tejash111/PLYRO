@@ -692,3 +692,14 @@ Unity 6000.3.26f1. Resolved by `PackageInstaller.InstallBatch` (`AddAndRemove` w
 - Deviation, `PackageManifestRules` takes the manifest's parsed `dependencies` (a dictionary), not JSON text. The spec gives `Bowling.Tooling.Editor` no precompiled references, and `Newtonsoft.Json.dll` doesn't exist before the install, so the tests (which have Newtonsoft) parse the JSON.
 - Side effect, committed in `325a162` (ruling R10): installing URP made Unity create `Assets/UniversalRenderPipelineGlobalSettings.asset` and `Assets/DefaultVolumeProfile.asset`, edit `ProjectSettings/GraphicsSettings.asset` and `InputManager.asset`, and add `ProjectSettings/ShaderGraphSettings.asset`. Task 5 relocates them (spec 3.4: `Assets/_Project/Settings/`).
 - Wording, "installed": in `PackageInstaller` (its `Required` and `Removed` lists and `Verify()`), a package counts as installed when it is a direct dependency in `Packages/manifest.json`. A package that is only a transitive dependency (such as `com.unity.ugui`) does not count.
+
+### Execution rulings that supersede plan text
+
+Where a task's text below disagrees with one of these rulings, the ruling wins.
+
+- **R18:** `ThrowEvent` is created in Task 12, not Task 13.
+- **R19:** the fakes live in `Modules/Testing/Runtime/Core/`, one public type per file; their tests are split by area under `Modules/Testing/Tests/EditMode/`.
+- **R21:** a source updates its own observable state before raising events, and raises change events on every actual change. `CompleteWith`, `EmitThrow`, `Reject` and the calibrator's `Begin`/`Cancel` follow this, which supersedes the event orders in the Task 14 bullets.
+- **R21b:** `Disarm` raises `PhaseChanged` when the phase changes.
+- **R21c:** `SetBumpers` throws while rolling, `Reject` throws when disarmed, and `RaiseMilestone` accepts only `EnteredGutter`, `ReachedPins` and `EnteredPit`, and only while rolling.
+- **R22:** gameplay event order: every transition assigns `Current` first, then raises `StateChanged`, then `SnapshotChanged`; for a scored roll the order is `StateChanged(Scoring)`, `RollScored`, `SnapshotChanged` (gameplay spec sections 4 and 6).

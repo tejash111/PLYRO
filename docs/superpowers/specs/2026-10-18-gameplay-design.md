@@ -84,7 +84,7 @@ Every duration is a `GameplayTuning` field, with the default shown. Time comes f
 | AwaitReady | `sim.SetBumpers(difficulty.Bumpers)`; `sim.SetRack(rackForThisBall)`; `throwSource.Arm(context)` | `throwSource.Phase` becomes Ready, Backswing or ForwardSwing | AwaitThrow |
 | AwaitThrow | — | `Thrown(evt)` calls `sim.Roll(evt)`; `Rejected` | Rolling; AwaitReady (re-armed; the ball isn't consumed) |
 | Rolling | — | `sim.Completed(result)` | Scoring |
-| Scoring | `ScoreCard.AddRoll(result.PinsKnocked)`; raise `RollScored`; publish the snapshot | `scoringHold` (1.5 s) elapses, or `scoringHoldReplay` (4.5 s) when the mark is a Strike or Spare (presentation replay 3.5 s or less, plus 1.0 s) | the next ball's AwaitReady; the next player's Calibrate or AwaitReady; or GameOver |
+| Scoring | `ScoreCard.AddRoll(result.PinsKnocked)`; build and assign the new `Current` (State = Scoring); then raise `StateChanged(Scoring)`, `RollScored` and `SnapshotChanged`, in that order | `scoringHold` (1.5 s) elapses, or `scoringHoldReplay` (4.5 s) when the mark is a Strike or Spare (presentation replay 3.5 s or less, plus 1.0 s) | the next ball's AwaitReady; the next player's Calibrate or AwaitReady; or GameOver |
 | Paused | `throwSource.Disarm()`; remember the resume state | Presence true again: resume, re-entering that state (Calibrate restarts; AwaitReady re-arms); or `abandonAfterPause` (15 s) elapses; or `Resume()` | (resume state); Attract (no leaderboard entry); (resume state) |
 | GameOver | Submit one `LeaderboardEntry` per player | `gameOverHold` (2.0 s) elapses | Results |
 | Results | — | `resultsHold` (10 s) elapses; or presence false for 3 s; or `SelectMode(...)` ("Play again") | Attract; Attract; Calibrate (new game, same players count) |
@@ -165,7 +165,8 @@ Every duration is a `GameplayTuning` field, with the default shown. Time comes f
 ## 6. Snapshots and events
 
 - `SnapshotBuilder` creates a **new** `GameSnapshot` on every change. Published snapshots are never mutated, so the UI can keep references.
-- **Event order for a scored roll:** `RollScored`, then `SnapshotChanged`, then (later) `StateChanged`.
+- **Rule:** every transition assigns `Current` first, then raises `StateChanged`, then `SnapshotChanged`. Handlers therefore always see the new `Current`.
+- **Event order for a scored roll:** `Current` is already the new snapshot (State = Scoring) before any event, then `StateChanged(Scoring)`, then `RollScored`, then `SnapshotChanged`.
 - `StateChanged` fires on every transition, including Paused and resume. `SnapshotChanged` also fires on state changes, because the snapshot includes `State`.
 - **Exceptions:** an exception thrown by a subscriber is caught, logged via `IGameLog.Error("Gameplay", …)`, and never breaks the state machine.
 
