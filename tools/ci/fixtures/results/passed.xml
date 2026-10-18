@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test-run id="2" testcasecount="1" result="Passed" total="1" passed="1" failed="0">
+  <test-suite type="Assembly" name="Bowling.Example.dll" fullname="Bowling.Example.dll" result="Passed" total="1" passed="1" failed="0">
+    <test-case name="C" fullname="A.B.C" result="Passed" />
+  </test-suite>
+</test-run>
