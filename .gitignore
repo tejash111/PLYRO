@@ -1,1 +1,30 @@
+# macOS
 .DS_Store
+
+# Agent workspaces (they live inside the repo)
+.claude/worktrees/
+.superpowers/
+
+# Unity project (unity/MotionBowling/)
+unity/MotionBowling/Library/
+unity/MotionBowling/Temp/
+unity/MotionBowling/Obj/
+unity/MotionBowling/Build/
+unity/MotionBowling/Builds/
+unity/MotionBowling/Logs/
+unity/MotionBowling/UserSettings/
+unity/MotionBowling/MemoryCaptures/
+unity/MotionBowling/*.csproj
+unity/MotionBowling/*.sln
+
+# Scratch output of the tests (Unity also generates a .meta for the folder)
+unity/MotionBowling/Assets/_TestTemp/
+unity/MotionBowling/Assets/_TestTemp.meta
+
+# IDE state
+.vs/
+.idea/
+
+# Native build output
+native/**/build/
+native/**/bazel-*
