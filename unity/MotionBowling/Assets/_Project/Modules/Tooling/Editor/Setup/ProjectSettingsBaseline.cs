@@ -7,8 +7,8 @@ using UnityEngine.Rendering;
 namespace Bowling.Tooling.Editor
 {
     /// <summary>
-    /// Applies the project's player, editor and time settings (foundation spec, sections 3.1 to 3.3), so the
-    /// settings live in code and not in somebody's Inspector clicks. Every method is idempotent: a second run
+    /// Applies the project's player, editor, time and rendering settings (foundation spec, sections 3.1 to 3.5), so
+    /// the settings live in code and not in somebody's Inspector clicks. Every method is idempotent: a second run
     /// finds the values already in place and leaves the settings files unchanged. Run it headless with
     /// <c>tools/ci/unity.sh exec Bowling.Tooling.Editor.ProjectSettingsBaseline.ApplyAllBatch</c>.
     /// </summary>
@@ -56,6 +56,18 @@ namespace Bowling.Tooling.Editor
         }
 
         /// <summary>
+        /// Applies sections 3.4 and 3.5 of the foundation spec: the URP asset, the single "Booth" quality level, the
+        /// global volume profile, the Rendering prefab and Main.unity. The work is in <see cref="RenderingBaseline"/>
+        /// and <see cref="MainSceneBaseline"/>.
+        /// </summary>
+        public static void ApplyRendering()
+        {
+            RenderingBaseline.Apply();
+            MainSceneBaseline.Apply();
+            AssetDatabase.SaveAssets();
+        }
+
+        /// <summary>
         /// Batch entry point: applies every baseline, saves the assets, then ends the editor with exit code 0.
         /// On any exception it logs it and ends the editor with exit code 1.
         /// </summary>
@@ -65,8 +77,9 @@ namespace Bowling.Tooling.Editor
             try
             {
                 ApplyPlayerEditorAndTime();
+                ApplyRendering();
                 AssetDatabase.SaveAssets();
-                Debug.Log("[ProjectSettingsBaseline] applied the player, editor and time settings");
+                Debug.Log("[ProjectSettingsBaseline] applied the player, editor, time and rendering settings");
             }
             catch (Exception exception)
             {

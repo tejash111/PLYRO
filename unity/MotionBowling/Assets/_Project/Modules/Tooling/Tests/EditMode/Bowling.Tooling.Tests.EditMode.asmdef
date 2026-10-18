@@ -3,6 +3,8 @@
     "rootNamespace": "Bowling.Tooling.Tests",
     "references": [
         "Bowling.Tooling.Editor",
+        "Unity.RenderPipelines.Universal.Runtime",
+        "Unity.RenderPipelines.Core.Runtime",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

@@ -1,7 +1,10 @@
 {
     "name": "Bowling.Tooling.Editor",
     "rootNamespace": "Bowling.Tooling.Editor",
-    "references": [],
+    "references": [
+        "Unity.RenderPipelines.Universal.Runtime",
+        "Unity.RenderPipelines.Core.Runtime"
+    ],
     "includePlatforms": [
         "Editor"
     ],

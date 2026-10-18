@@ -110,3 +110,18 @@ grep -nE "cameraUsageDescription|macOSTargetOSVersion|activeInputHandler" unity/
 ```
 
 All three exist under these exact names, so no substitutes were needed. The line numbers in that output (328, 332 and 682) belong to this Unity version and shift between versions, so look the keys up by name.
+
+## Serialized QualitySettings keys
+
+Unity has no public API to remove quality levels or to set a level's render pipeline asset for a level other than the current one, so `RenderingBaseline` edits `ProjectSettings/QualitySettings.asset` (`--- !u!47 &1`) through `new SerializedObject(AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/QualitySettings.asset")[0])`. The keys, as Unity 6000.3.26f1 writes them:
+
+| Key | Type | Meaning |
+|---|---|---|
+| `m_QualitySettings` | array of level structs | One struct per quality level. The baseline keeps one, named `Booth`. |
+| `m_QualitySettings.Array.data[i].name` | string | The level's name (`QualitySettings.names`). |
+| `m_QualitySettings.Array.data[i].vSyncCount` | int | `0` off, `1` every V blank, `2` every second V blank. |
+| `m_QualitySettings.Array.data[i].customRenderPipeline` | object reference | The URP asset this level renders with (`QualitySettings.renderPipeline`). |
+| `m_CurrentQuality` | int | Index of the level used in the editor. |
+| `m_PerPlatformDefaultQuality` | map of platform name to int | Index of the default level for each platform. Each entry's value is the `second` field. |
+
+`GraphicsSettings.defaultRenderPipeline` is a public API and needs no key. The URP global settings asset is registered in `ProjectSettings/GraphicsSettings.asset` by GUID (`m_RenderPipelineGlobalSettingsMap`), which is why the baseline moves it with `AssetDatabase.MoveAsset` instead of recreating it.
