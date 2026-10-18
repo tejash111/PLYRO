@@ -224,13 +224,19 @@ namespace Bowling.Tooling.Tests
         }
 
         [Test]
-        public void MainSceneHasTheRenderingPrefabInstanceAsItsOnlyRoot()
+        public void MainSceneRootsAreTheBootstrapObjectAndTheRenderingPrefabInstance()
         {
             Scene scene = OpenMainScene();
             GameObject[] roots = scene.GetRootGameObjects();
-            Assert.That(roots, Has.Length.EqualTo(1));
-            Assert.That(PrefabUtility.IsAnyPrefabInstanceRoot(roots[0]), Is.True);
-            Object source = PrefabUtility.GetCorrespondingObjectFromSource(roots[0]);
+            Assert.That(roots.Select(root => root.name), Is.EquivalentTo(new[] { "Bootstrap", "Rendering" }));
+
+            // The Bootstrap root is the one loose object spec 3.5 allows; everything else is a prefab instance.
+            GameObject bootstrap = roots.Single(root => root.name == "Bootstrap");
+            Assert.That(PrefabUtility.IsAnyPrefabInstanceRoot(bootstrap), Is.False);
+
+            GameObject rendering = roots.Single(root => root.name == "Rendering");
+            Assert.That(PrefabUtility.IsAnyPrefabInstanceRoot(rendering), Is.True);
+            Object source = PrefabUtility.GetCorrespondingObjectFromSource(rendering);
             Assert.That(AssetDatabase.GetAssetPath(source), Is.EqualTo(PrefabPath));
         }
 

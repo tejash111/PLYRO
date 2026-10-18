@@ -6,11 +6,10 @@ The single composition root. It bootstraps the game, constructs the plain C# ser
 
 ## Public API
 
-The module is a skeleton for now: the types arrive with the App task of sub-project 1. It will have:
-
-- `GameBootstrap`, a MonoBehaviour with `[DefaultExecutionOrder(-1000)]`, the only composition root. Its `Awake` constructs the services and hands references to module components through their public `Initialize(...)` methods.
-- `UnityClock` (`IClock`, unscaled time) and `UnityConsoleGameLog` (`IGameLog`). Both live here until Platform replaces the logger.
-- `ExecutionOrder`, the constants for the driver update order (PoseInput -300, ThrowDetection -200, Gameplay -100, Presentation 0, UI 100).
+- `GameBootstrap`, a MonoBehaviour with `[DefaultExecutionOrder(-1000)]`, the only composition root. `Awake` constructs `UnityClock` and `UnityConsoleGameLog`, exposes them as `Clock` and `Log`, and logs `[App] Boot`. Later sub-projects add the wiring that hands references to module components through their public `Initialize(...)` methods.
+- `UnityClock` (`IClock`, `Time.unscaledTimeAsDouble`) and `UnityConsoleGameLog` (`IGameLog`, writes `[category] message` to the Unity console; `Error` also logs the exception). Both live here until Platform replaces the logger.
+- `ExecutionOrder`, constants only: `Bootstrap` -1000, `PoseInput` -300, `ThrowDetection` -200, `Gameplay` -100, `Presentation` 0, `UI` 100. Modules write the literal number in their drivers' `[DefaultExecutionOrder]`; `ExecutionOrderTests` checks every `*Driver` type against the constant named after its module.
+- `MainSceneSetup` (editor): `EnsureBootstrap()` and the batch entry point `EnsureBootstrapBatch()` add the `Bootstrap` root with `GameBootstrap` to `Main.unity` when it is missing, and change nothing when it is there. Run it with `tools/ci/unity.sh exec Bowling.App.Editor.MainSceneSetup.EnsureBootstrapBatch`.
 
 ## Dependencies
 
@@ -21,7 +20,9 @@ The module is a skeleton for now: the types arrive with the App task of sub-proj
 
 ## Folder map
 
-- `Runtime/`: the runtime assembly `Bowling.App`. For now it holds only `AssemblyInfo.cs` (`InternalsVisibleTo` for the test assemblies); `Components/` and `Core/` arrive with the implementation (foundation spec section 4.2).
-- `Editor/`: the editor-only assembly `Bowling.App.Editor` (the build script).
-- `Tests/EditMode/`: EditMode integration tests (`Bowling.App.Tests.EditMode`).
-- `Tests/PlayMode/`: PlayMode integration tests (`Bowling.App.Tests.PlayMode`).
+- `Runtime/`: the runtime assembly `Bowling.App`, plus `AssemblyInfo.cs` (`InternalsVisibleTo` for the test assemblies).
+  - `Components/`: `GameBootstrap`.
+  - `Core/`: `ExecutionOrder`, `UnityClock`, `UnityConsoleGameLog`.
+- `Editor/`: the editor-only assembly `Bowling.App.Editor`. It holds `MainSceneSetup`; the build script comes later.
+- `Tests/EditMode/`: EditMode tests (`Bowling.App.Tests.EditMode`), currently `UnityConsoleGameLogTests`.
+- `Tests/PlayMode/`: PlayMode tests (`Bowling.App.Tests.PlayMode`): `BootstrapSceneTests` loads `Main` and checks the single `GameBootstrap`; `ExecutionOrderTests` checks the order constants and every driver's attribute.
