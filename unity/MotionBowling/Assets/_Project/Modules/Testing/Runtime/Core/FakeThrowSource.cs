@@ -59,9 +59,15 @@ namespace Bowling.Testing
         }
 
         // Returns to WaitingForReady (PhaseChanged if the phase changed), then raises Rejected, so the
-        // source is already waiting when Rejected fires.
+        // source is already waiting when Rejected fires. Throws InvalidOperationException when disarmed,
+        // as EmitThrow does: a disarmed source has no swing to reject.
         public void Reject(ThrowRejection reason)
         {
+            if (Phase == SwingPhase.Disarmed)
+            {
+                throw new InvalidOperationException("Reject needs an armed source: call Arm first.");
+            }
+
             ChangePhase(SwingPhase.WaitingForReady);
             Rejected?.Invoke(reason);
         }

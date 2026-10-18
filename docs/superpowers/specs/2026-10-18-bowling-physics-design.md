@@ -125,7 +125,7 @@ Because the ball uses `Multiply` for friction, the ball-to-lane friction equals 
 2. Activate the ball. Place it at (`StartOffsetM`, 0.109 + 0.001, −0.30), with no rotation.
 3. Set the linear velocity to `SpeedMps` × (sin θ, 0, cos θ), where θ = `LaunchAngleDeg`.
 4. Set the angular velocity to 0. The ball skids on oil and starts rolling in the dry zone through friction, as real balls do.
-5. Raise `Milestone(Released)`. The state machine moves to `Rolling`.
+5. Enter `Rolling` (`IsRolling = true`), then raise `Milestone(Released)`.
 
 **Hook (`HookModel`, applied by `HookForce` in FixedUpdate):**
 

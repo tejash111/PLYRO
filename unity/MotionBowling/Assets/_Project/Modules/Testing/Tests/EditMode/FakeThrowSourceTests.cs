@@ -221,6 +221,27 @@ namespace Bowling.Testing.Tests
         }
 
         [Test]
+        public void RejectWhileDisarmedThrowsAndRaisesNothing()
+        {
+            var source = new FakeThrowSource();
+            List<string> events = Record(source);
+
+            Assert.Throws<InvalidOperationException>(() => source.Reject(ThrowRejection.PlayerLeft));
+            Assert.AreEqual(SwingPhase.Disarmed, source.Phase, "a rejected call must not arm the source");
+            Assert.IsEmpty(events);
+        }
+
+        [Test]
+        public void RejectAfterAThrowThrowsBecauseTheThrowDisarmed()
+        {
+            var source = new FakeThrowSource();
+            source.Arm(Context);
+            source.EmitThrow(Throw);
+
+            Assert.Throws<InvalidOperationException>(() => source.Reject(ThrowRejection.SwingTimeout));
+        }
+
+        [Test]
         public void RejectFromWaitingForReadyRaisesOnlyRejected()
         {
             var source = new FakeThrowSource();

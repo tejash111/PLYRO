@@ -34,8 +34,15 @@ namespace Bowling.Testing
 
         public event Action<RollResult> Completed;
 
+        // Records the argument. Only valid while idle (physics spec section 7): throws InvalidOperationException
+        // while rolling.
         public void SetBumpers(bool enabled)
         {
+            if (IsRolling)
+            {
+                throw new InvalidOperationException("SetBumpers is not allowed while a roll is in progress.");
+            }
+
             LastBumpers = enabled;
             SetBumpersCount++;
         }
@@ -84,9 +91,24 @@ namespace Bowling.Testing
             Completed?.Invoke(new RollResult(before, standingAfter, gutter, reason));
         }
 
-        // Raises an intermediate milestone (EnteredGutter, ReachedPins, EnteredPit). Changes no state.
+        // Raises a mid-roll milestone (EnteredGutter, ReachedPins or EnteredPit). Changes no state. Throws
+        // InvalidOperationException when not rolling, or for Released and Settled, which Roll and
+        // CompleteWith raise themselves.
         public void RaiseMilestone(RollMilestone milestone)
         {
+            if (!IsRolling)
+            {
+                throw new InvalidOperationException("RaiseMilestone needs a roll in progress: call Roll first.");
+            }
+
+            if (milestone != RollMilestone.EnteredGutter
+                && milestone != RollMilestone.ReachedPins
+                && milestone != RollMilestone.EnteredPit)
+            {
+                throw new InvalidOperationException(
+                    $"RaiseMilestone does not raise {milestone}: Roll raises Released and CompleteWith raises Settled.");
+            }
+
             Milestone?.Invoke(milestone);
         }
 

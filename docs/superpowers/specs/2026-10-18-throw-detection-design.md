@@ -81,10 +81,10 @@ ForwardSwing ──► Released   (first condition to hold; release time tR = th
 Released: compute features over the release window → ThrowEvent → Disarmed (PhaseChanged) → raise Thrown
 
 Guards (checked every pose):
-   Backswing or ForwardSwing lasting > swingTimeout (2.0 s) since Backswing entry → Rejected(SwingTimeout) → WaitingForReady
-   At Released: wrist path length since Backswing entry < minSwingPath (0.80·L)     → Rejected(SwingTooSmall) → WaitingForReady
-   At Released: release-window mean Confidence < minReleaseConfidence (0.45)        → Rejected(LowConfidence) → WaitingForReady
-   Player presence lost while in Ready/Backswing/ForwardSwing                       → Rejected(PlayerLeft) → WaitingForReady
+   Backswing or ForwardSwing lasting > swingTimeout (2.0 s) since Backswing entry → WaitingForReady, then raise Rejected(SwingTimeout)
+   At Released: wrist path length since Backswing entry < minSwingPath (0.80·L)     → WaitingForReady, then raise Rejected(SwingTooSmall)
+   At Released: release-window mean Confidence < minReleaseConfidence (0.45)        → WaitingForReady, then raise Rejected(LowConfidence)
+   Player presence lost while in Ready/Backswing/ForwardSwing                       → WaitingForReady, then raise Rejected(PlayerLeft)
    Disarm() at any time → Disarmed (PhaseChanged if the phase changed; no Thrown or Rejected)
 ```
 
@@ -183,7 +183,7 @@ Speed and start offset are never assisted. Bumpers are a physics concern (`Diffi
   - A timeout (a slow 2.5 s swing) gives `Rejected(SwingTimeout)`.
   - A short flick gives `Rejected(SwingTooSmall)`.
   - A hand raised overhead never reaches `Ready`.
-  - `Disarm` mid-swing raises no events.
+  - `Disarm` mid-swing raises `PhaseChanged(Disarmed)` and no `Thrown`/`Rejected`.
   - Presence loss gives `Rejected(PlayerLeft)`.
 - **Mapping:**
   - Speed is monotonic in peak wrist speed.
