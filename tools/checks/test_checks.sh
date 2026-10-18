@@ -154,6 +154,10 @@ assert_output_contains "G-1 Assets/_Project/Styles/Extra.uss:2 " "$CHECK" --root
 assert_output_contains "G-1 Assets/_Project/Styles/Extra.uss:5 " "$CHECK" --root "$G1" --rules G-1
 assert_output_contains "G-1 Assets/Menus/Outside.uxml:2 " "$CHECK" --root "$G1" --rules G-1
 assert_exit 0 output_lacks "Extra.uss:8" "$CHECK" --root "$G1" --rules G-1
+# A var() among the first three tokens of a text-shadow fails (ruling R25); one after them does not.
+assert_output_contains "G-1 Assets/_Project/Styles/Var.uss:2 " "$CHECK" --root "$G1" --rules G-1
+assert_output_contains "G-1 Assets/_Project/Styles/Var.uss:5 " "$CHECK" --root "$G1" --rules G-1
+assert_exit 0 output_lacks "Var.uss:8" "$CHECK" --root "$G1" --rules G-1
 
 # G-2 skips lines that start with //, but still flags the same token in code (Review Focus 4).
 G2="$FIXTURES/fail/G-2/Assets"
@@ -162,6 +166,12 @@ assert_output_contains "G-2 Assets/_Project/Scripts/Bad.cs:5 " "$CHECK" --root "
 assert_output_contains "G-2 Assets/_Project/Scripts/Bad.cs:6 " "$CHECK" --root "$G2" --rules G-2
 assert_exit 0 output_lacks "Bad.cs:1 " "$CHECK" --root "$G2" --rules G-2
 assert_exit 0 output_lacks "Bad.cs:2 " "$CHECK" --root "$G2" --rules G-2
+# G-2 reads all of Assets (ruling R25), the constructor forms, .endColor =, FilmGrain and Bloom.
+assert_output_contains "G-2 Assets/Other/Outside.cs:3 " "$CHECK" --root "$G2" --rules G-2
+for ln in 3 4 5 6 8; do
+  assert_output_contains "G-2 Assets/_Project/Scripts/Forms.cs:$ln " "$CHECK" --root "$G2" --rules G-2
+done
+assert_exit 0 output_lacks "Forms.cs:7 " "$CHECK" --root "$G2" --rules G-2
 
 # G-3 covers .shadergraph and .shadersubgraph.
 G3="$FIXTURES/fail/G-3/Assets"
@@ -212,6 +222,94 @@ ScreenSpaceLensFlare
 EOF
 assert_exit 0 run_one G-2 T.cs "var x = AmbientMode.Flat; RenderSettings.fog = false;"
 
+# G-2 constructor forms, the renderer end colour, and the post-processing type names (ruling R25).
+while IFS= read -r stmt; do
+  assert_exit 1 run_one G-2 T.cs "$stmt"
+  assert_exit 1 run_one G-2 T.cs "    $stmt // not a full-line comment"
+  assert_exit 0 run_one G-2 T.cs "    // $stmt"
+done <<'EOF'
+var g = new UnityEngine.Gradient();
+var g = new Gradient ();
+var g = new  Gradient();
+var g = new Gradient { mode = GradientMode.Fixed };
+var g = new Gradient{};
+var g = new Gradient
+Gradient g = new();
+Gradient g = new ();
+private Gradient _g = new() { mode = GradientMode.Fixed };
+private readonly UnityEngine.Gradient _g = new();
+Gradient  g  =  new  (  );
+line.endColor = Color.red;
+line.endColor=Color.red;
+trail.endColor   = c;
+var t = typeof(FilmGrain);
+volume.profile.TryGet(out Bloom bloom);
+class Bloom : VolumeComponent { }
+EOF
+while IFS= read -r stmt; do
+  assert_exit 0 run_one G-2 T.cs "$stmt"
+done <<'EOF'
+Gradient g;
+public Gradient Colors { get; }
+Gradient[] gs = new Gradient[2];
+var h = new GradientHelper();
+var h = new Gradient2();
+line.startColor = Color.red;
+var c = main.startColor;
+if (line.endColor == c) { }
+if (line.endColor != c) { }
+var endColor = Color.red;
+endColor = Color.red;
+var BloomRadius = 1f;
+var bloom = 1f;
+var _bloom = 1f;
+var Bloomberg = 1f;
+var MyBloom = 1f;
+var Bloom_Strength = 1f;
+var FilmGrainy = 1f;
+var xFilmGrain = 1f;
+EOF
+# A constructor whose { starts on the next line (Allman style) is found too.
+assert_exit 1 run_one G-2 T.cs 'var g = new Gradient
+{
+    mode = GradientMode.Fixed,
+};'
+assert_output_contains "G-2 Assets/_Project/T.cs:1 " run_one G-2 T.cs 'var g = new Gradient
+{
+};'
+assert_output_contains "G-2 Assets/_Project/T.cs:1 " run_one G-2 T.cs 'line.endColor = Color.red;'
+assert_output_contains "one-key colorGradient" run_one G-2 T.cs 'line.endColor = Color.red;'
+# Scope: .cs anywhere under Assets, except FMOD and Tooling.
+G2_CODE='var g = new Gradient();'
+while IFS= read -r p; do
+  assert_exit 1 run_at G-2 "$p" "$G2_CODE"
+done <<'EOF'
+Scripts/T.cs
+Other/Deep/Down/T.cs
+T.cs
+Plugins/Other/T.cs
+Plugins/FMODX/T.cs
+_Project/Scripts/T.cs
+_Project/Modules/Gameplay/Runtime/T.cs
+_Project/Modules/Gameplay/Tests/EditMode/T.cs
+_Project/Modules/App/Editor/T.cs
+EOF
+while IFS= read -r p; do
+  assert_exit 0 run_at G-2 "$p" "$G2_CODE"
+done <<'EOF'
+Plugins/FMOD/T.cs
+Plugins/FMOD/Deep/T.cs
+_Project/Modules/Tooling/Editor/T.cs
+_Project/Modules/Tooling/Tests/EditMode/T.cs
+Scripts/T.txt
+Scripts/T.uss
+EOF
+# The Tooling exclusion is for the G rules only: they leave Tooling alone, the others don't (see M-3 to M-8 below).
+assert_exit 0 run_at G-1 _Project/Modules/Tooling/Editor/T.uss "$BAD_USS"
+assert_exit 1 run_at G-1 _Project/Modules/Toolbox/Editor/T.uss "$BAD_USS"
+assert_exit 0 run_at G-3 _Project/Modules/Tooling/Editor/T.shadergraph '"m_Type": "UnityEditor.ShaderGraph.GradientNode"'
+assert_exit 0 run_at G-3b _Project/Modules/Tooling/Editor/T.hlsl 'float4 F() { return 0; }'
+
 while IFS= read -r token; do
   assert_exit 1 run_one G-3 T.shadergraph "\"m_Type\": \"UnityEditor.ShaderGraph.$token\""
   assert_exit 1 run_one G-3 T.shadersubgraph "\"m_Type\": \"UnityEditor.ShaderGraph.$token\""
@@ -254,6 +352,39 @@ assert_exit 1 run_one G-1 T.uxml '<ui:Label style="text-shadow: 1px 1px 2px blac
 assert_exit 0 run_one G-1 T.uxml '<ui:Label style="text-shadow: 1px 1px 0px black;" />'
 assert_output_contains "found 4px" shadow 'text-shadow: 2px 2px 4px black;'
 
+# A var() among the first three value tokens fails, because the blur could be a token (ruling R25).
+assert_exit 1 shadow 'text-shadow: 1px 1px var(--blur) black;'
+assert_exit 1 shadow 'text-shadow: 1px 1px var(--blur);'
+assert_exit 1 shadow 'text-shadow: var(--shadow);'
+assert_exit 1 shadow 'text-shadow: var(--x) var(--y) var(--blur) var(--c);'
+assert_exit 1 shadow 'text-shadow: 1px var(--y) 0 black;'
+assert_exit 1 shadow 'text-shadow: var(--x) 1px 0 black;'
+assert_exit 1 shadow 'text-shadow: VAR(--shadow);'
+assert_exit 1 shadow 'text-shadow:var(--shadow);'
+assert_exit 1 shadow 'text-shadow: var(--blur, 0) 1px 1px black;'
+assert_exit 1 shadow 'text-shadow: var(--offsets, 1px 1px) 0 black;'
+assert_exit 1 shadow 'text-shadow: 1px 1px
+        var(--blur) red;'
+assert_exit 1 shadow 'text-shadow: var(--shadow)'
+assert_exit 1 run_one G-1 T.uxml '<ui:Label style="text-shadow: 1px 1px var(--blur) black;" />'
+assert_exit 1 run_one G-1 T.uxml '<ui:Label style="text-shadow: var(--shadow);" />'
+# A var() after the first three tokens (the colour) is fine, and so is any var() that is not in a text-shadow.
+assert_exit 0 shadow 'text-shadow: 2px 2px 0 var(--color-shadow);'
+assert_exit 0 shadow 'text-shadow: 2px 2px 0px var(--color, rgba(0, 0, 0, 0.5));'
+assert_exit 0 shadow 'text-shadow: 2px 2px 0 var(--c) ;'
+assert_exit 0 shadow 'text-shadow: none; color: var(--color);'
+assert_exit 0 run_one G-1 T.uss '.a { text-shadow: 0 0 0 black; color: var(--text); }
+.b { margin-left: var(--gap); }'
+assert_exit 0 run_one G-1 T.uxml '<ui:Label style="text-shadow: 1px 1px 0px var(--c);" />'
+assert_output_contains "write the blur radius as a literal 0" shadow 'text-shadow: 1px 1px var(--blur) black;'
+assert_output_contains "G-1 Assets/_Project/T.uss:2 " shadow 'text-shadow: var(--shadow);'
+# A colour function is one token whatever is in it: its numbers are not lengths.
+assert_exit 1 shadow 'text-shadow: rgba(10, 20, 30, 0.5) 1px 1px 3px;'
+assert_exit 1 shadow 'text-shadow: rgba( 10 , 20 , 30 , 0.5 ) 1px 1px 3px;'
+assert_exit 1 shadow 'text-shadow: 1px 1px 3px rgba(10, 20, 30, 0.5);'
+assert_exit 0 shadow 'text-shadow: rgba( 10 , 20 , 30 , 0.5 ) 1px 1px 0;'
+assert_exit 0 shadow 'text-shadow: 1px 1px 0 hsl(10 20% 30% / 50%);'
+
 # ---------------------------------------------------------------------------------------------
 # SOT-2 text rules: M-3, M-4, M-5, M-6 and M-8. The fixtures are checked in the loop at the top;
 # these are the output lines and the edge cases.
@@ -265,6 +396,12 @@ M3F="$FIXTURES/fail/M-3/Assets"
 assert_output_contains "M-3 $CORE/Two.cs:7 " "$CHECK" --root "$M3F" --rules M-3
 assert_output_contains "'Other'" "$CHECK" --root "$M3F" --rules M-3
 assert_exit 0 output_lacks "Two.cs:3 " "$CHECK" --root "$M3F" --rules M-3
+# Tooling is judged like any other module (ruling R25).
+assert_output_contains "M-3 Assets/_Project/Modules/Tooling/Editor/Dup.cs:7 " "$CHECK" --root "$M3F" --rules M-3
+assert_exit 1 run_at M-3 _Project/Modules/Tooling/Editor/T.cs 'public class T { }
+public class U { }'
+assert_exit 1 run_at M-3 _Project/Modules/Tooling/Editor/T.cs 'public class U { }'
+assert_exit 0 run_at M-3 _Project/Modules/Tooling/Editor/T.cs 'public class T { }'
 assert_output_contains "M-3 $CORE/Mismatch.cs:3 " "$CHECK" --root "$M3F" --rules M-3
 assert_output_contains "must be in a file named NotMismatch.cs" "$CHECK" --root "$M3F" --rules M-3
 
@@ -442,11 +579,17 @@ assert_exit 1 "$CHECK" --root "$M4/mixed/Assets" --rules M-4
 assert_output_contains "M-4 Assets/_Project/Modules/Gameplay/Runtime/A.cs 401 lines" "$CHECK" --root "$M4/mixed/Assets" --rules M-4
 assert_output_contains "WARN M-4 Assets/_Project/Modules/Gameplay/Runtime/B.cs 301 lines" "$CHECK" --root "$M4/mixed/Assets" --rules M-4
 assert_exit 0 output_lacks "C.cs" "$CHECK" --root "$M4/mixed/Assets" --rules M-4
-# Only .cs under _Project outside Tooling: not .uss, not other folders of Assets, not Tooling.
+# Only .cs under _Project: not .uss, and not other folders of Assets (M-6 flags a .cs there).
 gen_assets "$M4/out" "Other/Big.cs" 500
-gen_assets "$M4/out" "_Project/Modules/Tooling/Editor/Big.cs" 500
 gen_assets "$M4/out" "_Project/Styles/Big.uss" 500
 assert_exit 0 prints_nothing "$CHECK" --root "$M4/out/Assets" --rules M-4
+# Tooling is judged like any other module (ruling R25): the exclusion is for the G rules only.
+gen_assets "$M4/tool" "_Project/Modules/Tooling/Editor/Big.cs" 401
+assert_exit 1 "$CHECK" --root "$M4/tool/Assets" --rules M-4
+assert_output_contains "M-4 Assets/_Project/Modules/Tooling/Editor/Big.cs 401 lines (max 400)" "$CHECK" --root "$M4/tool/Assets" --rules M-4
+gen_assets "$M4/toolwarn" "_Project/Modules/Tooling/Tests/EditMode/Big.cs" 301
+assert_exit 0 "$CHECK" --root "$M4/toolwarn/Assets" --rules M-4
+assert_output_contains "WARN M-4 Assets/_Project/Modules/Tooling/Tests/EditMode/Big.cs 301 lines" "$CHECK" --root "$M4/toolwarn/Assets" --rules M-4
 
 # M-5: scene lookups and singletons in runtime code, not in App, tests or editor code.
 M5F="$FIXTURES/fail/M-5/Assets"
@@ -504,6 +647,7 @@ Modules/Gameplay/Runtime/Core/T.cs
 Modules/UI/Runtime/Components/Badge/T.cs
 Modules/Testing/Runtime/T.cs
 Modules/AppX/Runtime/T.cs
+Modules/Tooling/Runtime/T.cs
 EOF
 while IFS= read -r p; do
   assert_exit 0 run_one M-5 "$p" "$FIND"
@@ -519,16 +663,61 @@ Scripts/T.cs
 EOF
 assert_exit 0 run_one M-5 Modules/Gameplay/Runtime/T.uss "$FIND"
 
-# M-6: .cs under _Project but outside Modules/.
+# M-6: every .cs under Assets is inside a module asmdef folder: Modules/<M>/Runtime, Editor,
+# Tests/EditMode or Tests/PlayMode (Tooling too). Only Plugins/FMOD (vendor) is exempt.
 M6F="$FIXTURES/fail/M-6/Assets"
 assert_output_contains "M-6 Assets/_Project/Scripts/Loose.cs " "$CHECK" --root "$M6F" --rules M-6
-assert_exit 1 run_one M-6 T.cs 'public class T { }'
-assert_exit 1 run_one M-6 Scripts/Deep/Down/T.cs 'public class T { }'
-assert_exit 0 run_one M-6 Modules/Gameplay/Runtime/T.cs 'public class T { }'
-assert_exit 0 run_one M-6 Scripts/T.txt 'public class T { }'
-assert_exit 0 run_one M-6 Scripts/T.uss '.a { color: red; }'
-assert_exit 0 run_at M-6 Other/T.cs 'public class T { }'
-assert_exit 0 run_at M-6 Plugins/FMOD/T.cs 'public class T { }'
+assert_output_contains "M-6 Assets/Scripts/Loose.cs " "$CHECK" --root "$M6F" --rules M-6
+assert_output_contains "M-6 Assets/_Project/Modules/Gameplay/Foo/Bar.cs " "$CHECK" --root "$M6F" --rules M-6
+assert_output_contains "M-6 Assets/_Project/Modules/Tooling/Loose.cs " "$CHECK" --root "$M6F" --rules M-6
+assert_output_contains "module asmdef folder" "$CHECK" --root "$M6F" --rules M-6
+M6="public class T { }"
+while IFS= read -r p; do
+  assert_exit 1 run_at M-6 "$p" "$M6"
+done <<'EOF'
+T.cs
+Scripts/T.cs
+Scripts/Deep/Down/T.cs
+Other/T.cs
+Plugins/T.cs
+Plugins/FMODX/T.cs
+Plugins/Other/T.cs
+_TestTemp/T.cs
+_Project/T.cs
+_Project/Scripts/T.cs
+_Project/Scripts/Deep/Down/T.cs
+_Project/Modules/T.cs
+_Project/Modules/Gameplay/T.cs
+_Project/Modules/Gameplay/Foo/T.cs
+_Project/Modules/Gameplay/Foo/Runtime/T.cs
+_Project/Modules/Gameplay/Config/T.cs
+_Project/Modules/Gameplay/Tests/T.cs
+_Project/Modules/Gameplay/Tests/Other/T.cs
+_Project/Modules/Gameplay/runtime/T.cs
+_Project/Modules/Tooling/T.cs
+_Project/Modules/Tooling/Config/T.cs
+EOF
+while IFS= read -r p; do
+  assert_exit 0 run_at M-6 "$p" "$M6"
+done <<'EOF'
+_Project/Modules/Gameplay/Runtime/T.cs
+_Project/Modules/Gameplay/Runtime/Core/Deep/T.cs
+_Project/Modules/Gameplay/Editor/T.cs
+_Project/Modules/Gameplay/Editor/Setup/T.cs
+_Project/Modules/Gameplay/Tests/EditMode/T.cs
+_Project/Modules/Gameplay/Tests/PlayMode/Sub/T.cs
+_Project/Modules/Tooling/Editor/T.cs
+_Project/Modules/Tooling/Editor/Validation/Rules/T.cs
+_Project/Modules/Tooling/Tests/EditMode/T.cs
+_Project/Modules/App/Runtime/T.cs
+_Project/Modules/App/Editor/T.cs
+Plugins/FMOD/T.cs
+Plugins/FMOD/Deep/T.cs
+Scripts/T.txt
+Scripts/T.uss
+_Project/Scripts/T.txt
+_Project/Modules/Gameplay/Foo/T.uss
+EOF
 
 # M-8, color literals: only in declaration values, and not in Styles/Tokens.uss.
 M8F="$FIXTURES/fail/M-8/Assets"
@@ -574,6 +763,8 @@ assert_output_contains "M-8 Assets/_Project/Styles/Hud.uss:2 " uss '.a {
 }'
 # Any .uss under Assets, and only Styles/Tokens.uss of the UI module is exempt.
 assert_exit 1 uss '.a { color: #fff; }' Menus/Menu.uss
+# Tooling is not excluded from M-8 (the exclusion is for the G rules only).
+assert_exit 1 uss '.a { color: #fff; }' _Project/Modules/Tooling/Editor/Window.uss
 assert_exit 1 uss ':root { --c: #fff; }' _Project/Modules/UI/Runtime/Styles/Other.uss
 assert_exit 1 uss ':root { --c: #fff; }' _Project/Modules/UI/Runtime/Tokens.uss
 assert_exit 1 uss ':root { --c: #fff; }' _Project/Modules/Gameplay/Runtime/Styles/Tokens.uss
@@ -879,6 +1070,21 @@ assert_exit 1 in_dir "$SR" "$CHECK" --staged
 assert_output_contains "M-6 Assets/_Project/Scripts/Loose.cs " in_dir "$SR" "$CHECK" --staged
 assert_output_contains "M-3 Assets/_Project/Modules/Gameplay/Runtime/Core/Wrong.cs:1 " in_dir "$SR" "$CHECK" --staged
 assert_output_contains "M-5 Assets/_Project/Modules/Gameplay/Runtime/Core/Finder.cs:1 " in_dir "$SR" "$CHECK" --staged
+# Staged (ruling R25): G-2 and M-6 read all of Assets, the G rules skip Tooling, the M rules and FMOD
+# are as everywhere.
+TS="$SPACED/tooling staged repo"
+new_repo "$TS"
+put "$TS" "$UNITY/Modules/Tooling/Editor/Patterns.cs" 'public class Patterns { object _g = new Gradient(); }'
+put "$TS" "$UNITY/Modules/Tooling/Loose.cs" 'public class Loose { }'
+put "$TS" "unity/MotionBowling/Assets/Other/Gradients.cs" 'public class Gradients { object _g = new Gradient(); }'
+put "$TS" "unity/MotionBowling/Assets/Plugins/FMOD/Vendor.cs" 'public class Vendor { object _g = new Gradient(); }'
+git -C "$TS" add -A
+assert_exit 1 in_dir "$TS" "$CHECK" --staged
+assert_output_contains "G-2 Assets/Other/Gradients.cs:1 " in_dir "$TS" "$CHECK" --staged
+assert_output_contains "M-6 Assets/Other/Gradients.cs " in_dir "$TS" "$CHECK" --staged
+assert_output_contains "M-6 Assets/_Project/Modules/Tooling/Loose.cs " in_dir "$TS" "$CHECK" --staged
+assert_exit 0 output_lacks "G-2 Assets/_Project/Modules/Tooling" in_dir "$TS" "$CHECK" --staged
+assert_exit 0 output_lacks "FMOD" in_dir "$TS" "$CHECK" --staged
 # A long file: 301 lines only warn (exit 0), 401 fail.
 LONG="$SPACED/long repo"
 new_repo "$LONG"

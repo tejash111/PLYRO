@@ -2,8 +2,8 @@
 # SOT-1 text rules G-1, G-2, G-3 and G-3b (foundation spec, section 8.1).
 # Sourced by check_sources_of_truth.sh, which provides list_files, run_awk, scan_tokens, REVIEWED
 # and TMP. Patterns are extended regular expressions, one per line; [.] and [(] are literal.
-# Scope: _Project, plus .uss/.uxml anywhere under Assets (G-1). Excluded folders are already
-# left out of the file list.
+# Scope: G-1 (.uss/.uxml) and G-2 (.cs) read all of Assets, G-3 and G-3b only _Project. Every G rule
+# skips Tooling (the g- scopes of list_files); FMOD is already left out of the file list.
 
 ALL_RULES="$ALL_RULES G-1 G-2 G-3 G-3b"
 
@@ -17,12 +17,38 @@ conic-gradient[(]'
 # text-shadow takes <x> <y> <blur> <color>, with the color first or last. The value can run over
 # several lines and ends at ; or } (or at the quote that closes a style="..." attribute). The
 # third length is the blur radius and must be zero. A value with two lengths has no blur.
+# The value is read as tokens: pieces between spaces, where a space inside ( ) does not split, so
+# rgba(0, 0, 0, 0.5) and var(--c, 1px 2px) are one token each. A var( in the first three tokens
+# fails, because the blur could be the token (the color may come first, so this also catches a
+# color token there).
 IFS= read -r -d '' AWK_TEXT_SHADOW <<'EOF' || true
+function tokens(v, t,    n, i, c, depth, cur) {
+  n = 0
+  depth = 0
+  cur = ""
+  for (i = 1; i <= length(v); i++) {
+    c = substr(v, i, 1)
+    if (c == "(") depth++
+    else if (c == ")" && depth > 0) depth--
+    if (depth == 0 && c ~ /[[:space:]]/) {
+      if (cur != "") t[++n] = cur
+      cur = ""
+    } else {
+      cur = cur c
+    }
+  }
+  if (cur != "") t[++n] = cur
+  return n
+}
 function check(v, at,    n, i, t, lens, third) {
   v = tolower(v)
-  gsub(/rgba?\([^)]*\)/, " ", v)
-  gsub(/hsla?\([^)]*\)/, " ", v)
-  n = split(v, t, /[[:space:]]+/)
+  n = tokens(v, t)
+  for (i = 1; i <= n && i <= 3; i++) {
+    if (index(t[i], "var(") > 0) {
+      print rule " Assets/" file ":" at " text-shadow uses var() in its first three tokens: write the blur radius as a literal 0 (blur via a token can't be checked)"
+      return
+    }
+  }
   lens = 0
   for (i = 1; i <= n; i++) {
     if (t[i] ~ /^[-+]?[.]?[0-9]/) {
@@ -67,14 +93,21 @@ END { if (pending) check(buf, start) }
 EOF
 
 rule_G_1() {
-  scan_tokens G-1 assets "uss uxml" 0 "banned gradient function" "$G1_PATTERNS" || return 1
-  run_awk assets "uss uxml" -v rule=G-1 "$AWK_TEXT_SHADOW"
+  scan_tokens G-1 g-assets "uss uxml" 0 "banned gradient function" "$G1_PATTERNS" || return 1
+  run_awk g-assets "uss uxml" -v rule=G-1 "$AWK_TEXT_SHADOW"
 }
 
 # ---------------------------------------------------------------------------------------------
-# G-2: gradient, vignette and ambient APIs in .cs. Lines that start with // are ignored.
+# G-2: gradient, vignette and ambient APIs in .cs, anywhere under Assets. Lines that start with //
+# are ignored. The constructor patterns cover new Gradient( and new UnityEngine.Gradient( with
+# optional spaces, new Gradient { ... }, a new Gradient that ends its line or runs on into a //
+# comment (its { is on the next line), and the target-typed form "Gradient name = new(". FilmGrain
+# and Bloom are whole words (the awk here has no \b): they are the URP types G-4 judges. A line or
+# trail renderer's end color is a gradient end, so it has its own message; .startColor is not
+# banned, because ParticleSystem.MainModule.startColor is a flat color.
 # ---------------------------------------------------------------------------------------------
-G2_PATTERNS='new Gradient[(]
+G2_PATTERNS='(^|[^A-Za-z0-9_])new[[:space:]]+(UnityEngine[.])?Gradient[[:space:]]*([({]|//|$)
+(^|[^A-Za-z0-9_])Gradient[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=[[:space:]]*new[[:space:]]*[({]
 GradientColorKey
 GradientAlphaKey
 colorGradient
@@ -88,10 +121,15 @@ ambientEquatorColor
 ambientGroundColor
 RenderSettings[.]fog[[:space:]]*=[[:space:]]*true
 Vignette
-ScreenSpaceLensFlare'
+ScreenSpaceLensFlare
+(^|[^A-Za-z0-9_])FilmGrain([^A-Za-z0-9_]|$)
+(^|[^A-Za-z0-9_])Bloom([^A-Za-z0-9_]|$)'
+
+G2_END_COLOR='[.]endColor[[:space:]]*=([^=]|$)'
 
 rule_G_2() {
-  scan_tokens G-2 project "cs" 1 "banned gradient or vignette API" "$G2_PATTERNS"
+  scan_tokens G-2 g-assets "cs" 1 "banned gradient or vignette API" "$G2_PATTERNS" || return 1
+  scan_tokens G-2 g-assets "cs" 1 "a line or trail end color makes a gradient: use one flat color through the material, or author a one-key colorGradient in a prefab (G-5 checks it)" "$G2_END_COLOR"
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -102,7 +140,7 @@ UnityEditor[.]ShaderGraph[.]SampleGradient
 UnityEditor[.]ShaderGraph[.]BlackbodyNode'
 
 rule_G_3() {
-  scan_tokens G-3 project "shadergraph shadersubgraph" 0 "banned gradient shader node" "$G3_PATTERNS"
+  scan_tokens G-3 g-project "shadergraph shadersubgraph" 0 "banned gradient shader node" "$G3_PATTERNS"
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -116,7 +154,7 @@ rule_G_3b() {
     sed -e 's/[[:space:]]*#.*$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' "$REVIEWED" \
       | grep -v '^$' > "$TMP/reviewed.txt"
   fi
-  list_files project "shader hlsl shadergraph" > "$TMP/shaders.txt"
+  list_files g-project "shader hlsl shadergraph" > "$TMP/shaders.txt"
   awk -v rule=G-3b '
     FILENAME == ARGV[1] { listed[$0] = 1; next }
     {

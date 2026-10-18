@@ -2,7 +2,8 @@
 # SOT-2 text rules M-3, M-4, M-5, M-6 and M-8 (foundation spec, section 8.2). M-1, M-2 and M-7 need
 # the Unity editor and live in Bowling.Tooling.Editor.
 # Sourced by check_sources_of_truth.sh, which provides list_files, run_awk, scan_tokens, tree_files,
-# touched_files and TMP. Excluded folders (Tooling, FMOD) are already left out of every file list.
+# touched_files and TMP. FMOD (vendor code) is already left out of every file list. Tooling is
+# judged like any other module: only the G rules skip it.
 # The last statement of this file registers the rules, so a lib that fails to load is an error.
 
 # ---------------------------------------------------------------------------------------------
@@ -206,11 +207,14 @@ rule_M_5() {
 }
 
 # ---------------------------------------------------------------------------------------------
-# M-6: a .cs file under Assets/_Project/ but outside Modules/
+# M-6: every .cs file under Assets/ is inside a module asmdef folder: Modules/<Module>/Runtime/,
+# Editor/, Tests/EditMode/ or Tests/PlayMode/ (a .cs anywhere else would compile into the default
+# Assembly-CSharp). Tooling counts as a module. FMOD (vendor) is not listed at all.
 # ---------------------------------------------------------------------------------------------
 rule_M_6() {
-  list_files project cs | grep -v '^_Project/Modules/' \
-    | sed 's|^.*$|M-6 Assets/& code must live in a module: move it under Assets/_Project/Modules/<Module>/|'
+  list_files assets cs \
+    | grep -v -E '^_Project/Modules/[^/]+/(Runtime|Editor|Tests/(EditMode|PlayMode))/' \
+    | sed 's|^.*$|M-6 Assets/& code must live in a module asmdef folder: move it under Assets/_Project/Modules/<Module>/{Runtime,Editor,Tests/EditMode,Tests/PlayMode}/|'
 }
 
 # ---------------------------------------------------------------------------------------------

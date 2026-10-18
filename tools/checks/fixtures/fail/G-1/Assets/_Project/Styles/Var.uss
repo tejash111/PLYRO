@@ -1,0 +1,9 @@
+.a {
+    text-shadow: 1px 1px var(--blur) black;
+}
+.b {
+    text-shadow: var(--shadow);
+}
+.c {
+    text-shadow: 1px 1px 0 var(--color);
+}

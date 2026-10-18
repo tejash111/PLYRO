@@ -162,11 +162,16 @@ case "$MODE" in
 esac
 [ -z "$REVIEWED_ARG" ] || REVIEWED="$REVIEWED_ARG"
 
-# drop_excluded: a filter that removes the excluded folders from a list of paths relative to ROOT:
-# Tooling holds the banned patterns as data, FMOD is vendor code. (tools/checks and Packages are
-# outside Assets.)
+# drop_excluded: a filter that removes the folders no rule looks at from a list of paths relative to
+# ROOT: FMOD is vendor code. (tools/checks and Packages are outside Assets.)
 drop_excluded() {
-  grep -v -e '^_Project/Modules/Tooling/' -e '^Plugins/FMOD/'
+  grep -v -e '^Plugins/FMOD/'
+}
+
+# drop_tooling: the G rules also skip Tooling, which holds the banned patterns as data. The M rules
+# judge it like any other module (see the g- scopes of list_files).
+drop_tooling() {
+  grep -v -e '^_Project/Modules/Tooling/'
 }
 
 # FILE_LIST: every file under ROOT (in staged mode: every staged file), relative to it.
@@ -179,18 +184,25 @@ FILE_LIST="$TMP/files.txt"
 
 # list_files <scope> "<ext> <ext>...": the files with these extensions, relative to ROOT.
 # Scope "project" is Assets/_Project only; "assets" is all of Assets; "runtime" is the runtime code
-# of the modules, Assets/_Project/Modules/<Module>/Runtime/, except Modules/App/.
+# of the modules, Assets/_Project/Modules/<Module>/Runtime/, except Modules/App/. FMOD is never
+# listed. "g-project" and "g-assets" are "project" and "assets" without Tooling: the scopes of the
+# G rules.
 list_files() {
   local scope="$1" exts="$2" ext re=""
   for ext in $exts; do
     re="$re${re:+|}$ext"
   done
-  case "$scope" in
-    project) grep -E "^_Project/.*[.]($re)\$" "$FILE_LIST" ;;
-    runtime)
-      grep -E "^_Project/Modules/[^/]+/Runtime/.*[.]($re)\$" "$FILE_LIST" | grep -v '^_Project/Modules/App/'
-      ;;
-    *) grep -E "[.]($re)\$" "$FILE_LIST" ;;
+  {
+    case "$scope" in
+      project | g-project) grep -E "^_Project/.*[.]($re)\$" "$FILE_LIST" ;;
+      runtime)
+        grep -E "^_Project/Modules/[^/]+/Runtime/.*[.]($re)\$" "$FILE_LIST" | grep -v '^_Project/Modules/App/'
+        ;;
+      *) grep -E "[.]($re)\$" "$FILE_LIST" ;;
+    esac
+  } | case "$scope" in
+    g-*) drop_tooling ;;
+    *) cat ;;
   esac
 }
 
