@@ -85,7 +85,7 @@ Guards (checked every pose):
    At Released: wrist path length since Backswing entry < minSwingPath (0.80·L)     → Rejected(SwingTooSmall) → WaitingForReady
    At Released: release-window mean Confidence < minReleaseConfidence (0.45)        → Rejected(LowConfidence) → WaitingForReady
    Player presence lost while in Ready/Backswing/ForwardSwing                       → Rejected(PlayerLeft) → WaitingForReady
-   Disarm() at any time → Disarmed (no event)
+   Disarm() at any time → Disarmed (PhaseChanged if the phase changed; no Thrown or Rejected)
 ```
 
 - `PhaseChanged` fires on every phase change.
