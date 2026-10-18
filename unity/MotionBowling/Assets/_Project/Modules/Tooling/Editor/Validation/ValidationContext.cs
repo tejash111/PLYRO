@@ -27,6 +27,22 @@ namespace Bowling.Tooling.Editor
 
         public string MainScenePath = "Assets/_Project/Scenes/Main.unity";
 
+        /// <summary>
+        /// The scenes G-5 judges, as asset paths. <c>null</c> (the default) means the enabled scenes of the build
+        /// settings. A test points the rule at temporary scenes without touching the build settings.
+        /// </summary>
+        public string[] ScenePaths;
+
+        /// <summary>The value of <see cref="AssetSearchRoot"/> that stands for the whole project.</summary>
+        public const string DefaultAssetSearchRoot = "Assets";
+
+        /// <summary>
+        /// The asset folder the editor rules scan: G-4 looks for volume profiles under it, G-5 for prefabs. The
+        /// default, <c>Assets</c>, means everything for G-4 and <c>Assets/_Project</c> for G-5 (spec section 8.1).
+        /// A test sets a narrower folder, which both rules then use as it is.
+        /// </summary>
+        public string AssetSearchRoot = DefaultAssetSearchRoot;
+
         public ModuleRules Rules;
 
         /// <summary>

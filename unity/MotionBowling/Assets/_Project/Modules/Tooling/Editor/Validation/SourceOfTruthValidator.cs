@@ -21,6 +21,9 @@ namespace Bowling.Tooling.Editor
             {
                 new ModuleStructureRule(),
                 new AsmdefReferenceRule(),
+                new VolumeProfileRule(),
+                new SceneAndPrefabRule(),
+                new MainSceneRootRule(),
             };
         }
 
