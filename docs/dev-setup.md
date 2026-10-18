@@ -93,6 +93,10 @@ bash tools/checks/install-hooks.sh
 
 If an editor is killed at once (exit 137, `Killed: 9`, empty log), its install is damaged. See "Broken install" under "Unity Hub and editor".
 
+## Expected Unity console notes
+
+Unity logs `Assembly for Assembly Definition File '...' will not be compiled, because it has no scripts associated with it.` for every module assembly that has no code yet (at the moment, the test assemblies and `Bowling.App.Editor`). This is expected. These are Unity console notes, not compiler warnings, so they don't count against the zero `warning CS` gate. Each note goes away when its assembly gets its first script.
+
 ## Serialized PlayerSettings keys
 
 Some settings have no public `PlayerSettings` API, so the baseline code reads and writes them by their serialized key. These are the exact keys in `unity/MotionBowling/ProjectSettings/ProjectSettings.asset` as written by Unity 6000.3.26f1 into a fresh project. They are top-level fields of the `PlayerSettings` document (`--- !u!129 &1`), so `FindProperty("<key>")` takes the bare name.

@@ -15,6 +15,6 @@ The module is a skeleton for now: the types arrive with sub-project 7 (UI spec).
 
 ## Folder map
 
-- `Runtime/`: the runtime assembly `Bowling.UI`. For now it holds only `AssemblyInfo.cs` (`InternalsVisibleTo` for the test assemblies). The implementation adds `Core/` and `Config/`, and in place of `Components/` it adds UI-component folders plus `Styles/`, `Screens/` and `Root/` (foundation spec section 4.2).
+- `Runtime/`: the runtime assembly `Bowling.UI`. For now it holds only `AssemblyInfo.cs` (`InternalsVisibleTo` for the test assemblies). The implementation adds `Core/` and `Config/`, and keeps `Components/`, where each subfolder is one UI component (`<Name>.uxml`, `<Name>.uss` and `<Name>.cs`) rather than a set of MonoBehaviours. It also adds `Styles/`, `Screens/<Name>Screen/` (and `Screens/<Name>Overlay/`) and `Root/` (foundation spec section 4.2).
 - `Tests/EditMode/`: EditMode tests for the pure logic (`Bowling.UI.Tests.EditMode`).
 - `Tests/PlayMode/`: PlayMode tests for the screens and components (`Bowling.UI.Tests.PlayMode`).

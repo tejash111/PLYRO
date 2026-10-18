@@ -18,7 +18,7 @@ The module is a skeleton for now: the fakes arrive with the Testing task of sub-
 ## Dependencies
 
 - `Bowling.Testing` references `Bowling.Contracts` only, and sets `defineConstraints: ["UNITY_INCLUDE_TESTS"]`. It overrides references and lists no precompiled DLLs.
-- Every test assembly in the project references `Bowling.Testing`. No runtime assembly does, and `Bowling.App` does not reference it.
+- Every module's test assemblies reference `Bowling.Testing`, except Tooling's (`Bowling.Tooling.Tests.EditMode` tests editor code and uses no fakes). No runtime assembly references it, and `Bowling.App` does not.
 - `Bowling.Testing.Tests.EditMode` references `Bowling.Testing`, `Bowling.Contracts` and the Unity test runners, plus the precompiled `nunit.framework.dll`. It tests the fakes' semantics.
 
 ## Folder map

@@ -180,7 +180,7 @@ Runtime/
 
 The Tooling module has no `Runtime/`. Its `Editor/` holds `Setup/` (package installer and project-settings baseline), `Validation/` (validators and rules) and `Config/`.
 
-The UI module replaces `Components/` with UI-component folders, and adds `Styles/`, `Screens/<Name>Screen/` (and `Screens/<Name>Overlay/` for overlays) and `Root/` (which holds its single MonoBehaviour, `UiRoot`). See the UI spec. Those are the only extra top-level folders allowed.
+The UI module keeps `Runtime/Components/`, but each subfolder there is one UI component (`<Name>.uxml`, `<Name>.uss` and `<Name>.cs`, which M-8 checks) rather than a set of MonoBehaviours. It also adds `Styles/`, `Screens/<Name>Screen/` (and `Screens/<Name>Overlay/` for overlays) and `Root/` (which holds its single MonoBehaviour, `UiRoot`). See the UI spec. Those are the only extra top-level folders allowed.
 
 ## 5. `Bowling.Contracts`
 
@@ -341,7 +341,7 @@ The Unity editor path comes from the `UNITY_EDITOR` environment variable. If tha
 
 ## 11. Acceptance criteria
 
-1. The project opens with the pinned editor and compiles with zero errors and zero warnings in `_Project`.
+1. The project opens with the pinned editor and compiles with zero errors and zero compiler warnings (`warning CS`) in `_Project`.
 2. All 11 module folders exist with READMEs and the asmdefs from section 4. M-1 and M-2 pass.
 3. Contracts matches system design section 6, and its tests pass.
 4. Every validator rule has passing and failing tests, and they pass.
