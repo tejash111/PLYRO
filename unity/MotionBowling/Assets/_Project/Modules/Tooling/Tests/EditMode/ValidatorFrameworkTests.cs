@@ -107,7 +107,7 @@ namespace Bowling.Tooling.Tests
         {
             IReadOnlyList<IValidationRule> rules = SourceOfTruthValidator.CreateRules();
 
-            Assert.That(rules.Select(r => r.Id), Is.EqualTo(new[] { "M-1", "M-2", "G-4", "G-5", "M-7" }));
+            Assert.That(rules.Select(r => r.Id), Is.EqualTo(new[] { "M-1", "M-2", "G-4", "G-5", "M-7", "G-6" }));
         }
 
         [Test]

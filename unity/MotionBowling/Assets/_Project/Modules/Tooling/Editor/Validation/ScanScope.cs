@@ -34,10 +34,10 @@ namespace Bowling.Tooling.Editor
             return root == ValidationContext.DefaultAssetSearchRoot ? ProjectFolder : root;
         }
 
-        /// <summary>The paths of the assets under <paramref name="folder"/> that match the filter, in a stable order.</summary>
-        public static IEnumerable<string> AssetPaths(string filter, string folder)
+        /// <summary>The paths of the assets under any of the folders that match the filter, each once, in a stable order.</summary>
+        public static IEnumerable<string> AssetPaths(string filter, params string[] folders)
         {
-            return AssetDatabase.FindAssets(filter, new[] { folder })
+            return AssetDatabase.FindAssets(filter, folders)
                 .Select(AssetDatabase.GUIDToAssetPath)
                 .Distinct()
                 .OrderBy(path => path, StringComparer.Ordinal);

@@ -29,7 +29,10 @@ namespace Bowling.Tooling.Tests
 
         public static void DeleteAll() => AssetDatabase.DeleteAsset(Root);
 
-        /// <summary>A context for a rule test: the open project, scanning only <paramref name="folder"/> and no build scene.</summary>
+        /// <summary>
+        /// A context for a rule test: the open project, scanning only <paramref name="folder"/> (for the textures too)
+        /// and no build scene.
+        /// </summary>
         public static ValidationContext Context(string folder)
         {
             string project = Path.GetDirectoryName(Application.dataPath);
@@ -38,6 +41,7 @@ namespace Bowling.Tooling.Tests
                 RepoRoot = Path.GetFullPath(Path.Combine(project, "..", "..")),
                 ProjectRoot = project,
                 AssetSearchRoot = folder,
+                TextureSearchRoots = new[] { folder },
                 ScenePaths = new string[0],
             };
         }

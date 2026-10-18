@@ -24,6 +24,7 @@ namespace Bowling.Tooling.Editor
                 new VolumeProfileRule(),
                 new SceneAndPrefabRule(),
                 new MainSceneRootRule(),
+                new TextureGradientRule(),
             };
         }
 
