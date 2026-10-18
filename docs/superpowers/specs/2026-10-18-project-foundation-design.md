@@ -136,7 +136,7 @@ Assets/_Project/Modules/<Module>/
 | Testing (fakes) | `Bowling.Testing` | `Bowling.Testing` | `[]` | `defineConstraints: ["UNITY_INCLUDE_TESTS"]` (never ships); references `Bowling.Contracts` only |
 
 - **Precompiled DLLs:** every asmdef sets `overrideReferences: true` and lists its precompiled DLLs explicitly. Otherwise auto-referenced DLLs such as `Newtonsoft.Json.dll` would reach every module.
-- **Test asmdef references:** their module, `Bowling.Contracts`, `Bowling.Testing`, `UnityEngine.TestRunner` and `UnityEditor.TestRunner`. They may also reference `Unity.PerformanceTesting`, the precompiled `Newtonsoft.Json.dll` (for JSON fixtures), and anything their own module may reference.
+- **Test asmdef references:** their module, `Bowling.Contracts`, `Bowling.Testing`, `UnityEngine.TestRunner` and `UnityEditor.TestRunner` (an allowed set, not mandatory references; Tooling's tests use no fakes). They may also reference `Unity.PerformanceTesting`, the precompiled `Newtonsoft.Json.dll` (for JSON fixtures), and anything their own module may reference.
 - **`Bowling.App`** references every runtime module.
 - **Unsafe code:** only `Bowling.PoseInput` sets `allowUnsafeCode: true`, for the zero-allocation interop in pose-input spec section 7. Any other module that needs it requires a spec change first.
 
@@ -222,7 +222,7 @@ Every one of these is a plain C# class implementing a Contracts interface. Each 
 | `FakeClock` | `IClock` | `Advance(seconds)` |
 | `FakeTrackingSource` | `ITrackingSource` | `Push(PoseSample)`, `SetStatus(...)` |
 | `FakePlayerInput` | `IPlayerInput` | `SetPresent(bool)`, `PushPose(PlayerPose)` |
-| `FakeCalibrator` | `IPlayerCalibrator` | `Complete(PlayerProfile)`, `Fail(reason)` |
+| `FakeCalibrator` | `IPlayerCalibrator` | `Complete(PlayerProfile)`, `Fail(reason)` (both throw `InvalidOperationException` unless a calibration is in progress: `Step` is not `Idle`, `Done` or `Failed`) |
 | `FakeThrowSource` | `IThrowSource` | `EmitThrow(ThrowEvent)`, `Reject(reason)`; records `Arm`/`Disarm` calls |
 | `FakeRollSimulator` | `IRollSimulator` | `CompleteWith(PinMask standingAfter, bool gutter = false)` |
 | `RecordingGameLog` | `IGameLog` | Exposes the logged entries |
@@ -267,31 +267,32 @@ Two layers share one rule set:
 
 **Scan scope:**
 
-- `Assets/_Project/**`, plus `.uss`/`.uxml` anywhere under `Assets/`.
-- Excluded: `Assets/_Project/Modules/Tooling/**` (it contains the banned patterns as data), `tools/checks/**`, and vendor folders (`Assets/Plugins/FMOD/**`, `Packages/**`).
+- Each rule's row says what it scans. The default is `Assets/_Project/**`. G-1 scans `.uss`/`.uxml` anywhere under `Assets/`. G-2 and M-6 scan `.cs` anywhere under `Assets/`. G-4 scans every volume profile under `Assets/`.
+- Excluded from every rule: vendor folders (`Assets/Plugins/FMOD/**`, `Packages/**`) and `tools/checks/**`.
+- Excluded from the G rules only: `Assets/_Project/Modules/Tooling/**`, because it contains the banned patterns as data. G-4 is the one exception: it judges every volume profile outside vendor folders, Tooling included, since Tooling holds none. The M rules judge Tooling like any other module.
 
 ### 8.1 SOT-1 rules (no gradients)
 
 | ID | Layer | Detects |
 |---|---|---|
-| G-1 | text | In `.uss`/`.uxml`: `linear-gradient(`, `radial-gradient(`, `conic-gradient(`, and `text-shadow` with a non-zero blur radius |
-| G-2 | text | In `.cs`, ignoring lines whose first non-space characters are `//`: `new Gradient(`, `GradientColorKey`, `GradientAlphaKey`, `colorGradient`, `enableVertexGradient`, `VertexGradient`, `TMP_ColorGradient`, `AmbientMode.Trilight`, `AmbientMode.Skybox`, `ambientSkyColor`, `ambientEquatorColor`, `ambientGroundColor`, `RenderSettings.fog = true`, `Vignette`, `ScreenSpaceLensFlare` |
+| G-1 | text | In `.uss`/`.uxml`: `linear-gradient(`, `radial-gradient(`, `conic-gradient(`, and `text-shadow` with a non-zero blur radius (the third length). A `text-shadow` that has `var(` anywhere in its first three value tokens, or whose whole value is a `var(`, also fails: a blur read from a token can't be checked, so write the blur radius as a literal `0` |
+| G-2 | text | In `.cs` anywhere under `Assets/` (vendor and Tooling excluded), ignoring lines whose first non-space characters are `//`: `new Gradient(`, `new UnityEngine.Gradient(`, `new Gradient {` (optional whitespace before the `(` or `{`), the target-typed form `Gradient <name> = new(`, `GradientColorKey`, `GradientAlphaKey`, `colorGradient`, `enableVertexGradient`, `VertexGradient`, `TMP_ColorGradient`, `AmbientMode.Trilight`, `AmbientMode.Skybox`, `ambientSkyColor`, `ambientEquatorColor`, `ambientGroundColor`, `RenderSettings.fog = true`, `Vignette`, `ScreenSpaceLensFlare`, the whole words `FilmGrain` and `Bloom` (as in G-4), and `.endColor =` (the end colour of a line or trail renderer: use one flat colour through the material, or author a one-key `colorGradient` in a prefab, which G-5 checks). `.startColor` is not banned, because `ParticleSystem.MainModule.startColor` is a legitimate flat colour |
 | G-3 | text | In `.shadergraph`/`.shadersubgraph`: node types `UnityEditor.ShaderGraph.GradientNode`, `UnityEditor.ShaderGraph.SampleGradient`, `UnityEditor.ShaderGraph.BlackbodyNode` |
 | G-3b | text | Any `.shader`/`.hlsl`/`.shadergraph` under `_Project` that isn't listed in `tools/checks/reviewed-shaders.txt` (format: `<path> # reviewed by <name> on <date>: <why gradient-free>`) |
-| G-4 | editor | Every `VolumeProfile` asset under `Assets/` (vendor folders excluded): an active `Vignette`, `ScreenSpaceLensFlare`, `FilmGrain` or `Bloom` (Q-3 default) whose intensity is overridden and above 0 (URP ignores parameters that aren't overridden). Unity 6's default profile carries every override at zero intensity, so zero-intensity overrides pass. |
+| G-4 | editor | Every `VolumeProfile` asset under `Assets/` (vendor folders excluded): an active `Vignette`, `ScreenSpaceLensFlare`, `FilmGrain` or `Bloom` (Q-3 default) whose intensity is overridden and above 0 (URP ignores parameters that aren't overridden). Unity 6's default profile may carry overrides at zero intensity (6.3's is empty), so zero-intensity overrides pass. |
 | G-5 | editor | Every scene in the build plus every prefab under `_Project`: `RenderSettings.ambientMode` not `Flat`; fog on; skybox not null; any `Camera.clearFlags == Skybox`; any `LineRenderer`/`TrailRenderer` whose `colorGradient` is not one flat color (its color keys hold more than one distinct color, or its alpha keys more than one distinct alpha; Unity stores a one-key gradient as two equal keys) |
-| G-6 | editor | Every color `Texture2D`/`Sprite` under `_Project/Art/**` and `_Project/Modules/UI/**`. Skipped: normal maps, non-sRGB data textures, lightmaps. Fails when more than 2% of opaque pixels differ from a fully opaque 4-neighbour by a small non-zero step (0 < Δ ≤ 3/255 on any channel), which is the signature of a smooth ramp. Thresholds live in `Tooling/Editor/Config/GradientHeuristic.asset`. The check reads the source PNG bytes, so any other color-texture format in the scanned folders fails G-6 with "convert to PNG". |
+| G-6 | editor | Every color `Texture2D`/`Sprite` under `Assets/_Project/**` (Tooling and vendor folders excluded). Skipped: normal maps, non-sRGB data textures, lightmaps. Fails when more than 2% of opaque pixels differ from a fully opaque 4-neighbour by a small non-zero step (0 < Δ ≤ 3/255 on any channel), which is the signature of a smooth ramp. Thresholds live in `Tooling/Editor/Config/GradientHeuristic.asset`. The check reads the source PNG bytes, so any other color-texture format in the scanned folders fails G-6 with "convert to PNG". |
 
 ### 8.2 SOT-2 rules (modular structure)
 
 | ID | Layer | Detects |
 |---|---|---|
-| M-1 | editor | A `Modules/<X>/` folder missing its README or expected asmdefs; asmdef names or rootNamespace that don't match section 4 |
+| M-1 | editor | A `Modules/<X>/` folder missing its README or expected asmdefs; asmdef names or rootNamespace that don't match section 4; any `.asmref` under `Assets/_Project/Modules/` (it would pull code into another assembly); any `.asmdef` under `Assets/` outside `Assets/_Project/Modules/` (vendor folders excluded) |
 | M-2 | editor | An asmdef reference outside `tools/checks/module-rules.json` |
 | M-3 | text | More than one public top-level type in a `.cs` file; file name ≠ public type name |
 | M-4 | text | A `.cs` file over 400 lines (fail) or over 300 lines (warning only) |
 | M-5 | text | In runtime `.cs` outside `Modules/App/`: `FindObjectOfType`, `FindFirstObjectByType`, `FindAnyObjectByType`, `GameObject.Find`, `Resources.Load`, and `static <Type> Instance` singleton properties |
-| M-6 | text | A `.cs` file under `Assets/_Project/` but outside `Modules/` |
+| M-6 | text | A `.cs` file anywhere under `Assets/` (vendor folders excluded) that isn't inside a module asmdef folder: `Assets/_Project/Modules/<Module>/Runtime/`, `Editor/`, `Tests/EditMode/` or `Tests/PlayMode/`. So `Assets/Scripts/Foo.cs` fails, and so does `Modules/Gameplay/Foo/Bar.cs` |
 | M-7 | editor | A root object in `Main.unity` that's neither a prefab instance root nor named `Bootstrap` |
 | M-8 | text | A UI component folder `UI/Runtime/Components/<Name>/` missing `<Name>.uxml`, `<Name>.uss` or `<Name>.cs`; a color literal (`#hex`, `rgb(`, `rgba(`) in any `.uss` other than `UI/Runtime/Styles/Tokens.uss` |
 
@@ -316,7 +317,7 @@ Two layers share one rule set:
 
 **How Unity steps are judged:**
 
-- Unity documents no process exit codes for test runs. So test steps pass only when the NUnit XML results file exists, its `total` is above 0 and its `failed` is 0.
+- Unity documents no process exit codes for test runs. So test steps pass only when the NUnit XML results file exists, its `total` is above 0, its `failed` is 0 and its `inconclusive` is 0. An inconclusive test (for example one that stops at a failed `Assume.That`) is neither a pass nor a fail, so it must not keep CI green: tests use `Assert`, never `Assume`.
 - Step 3 also fails on any `warning CS` from `Assets/_Project` in the editor log, which covers acceptance criterion 1.
 
 **Helper scripts:**
@@ -349,7 +350,7 @@ The Unity editor path comes from the `UNITY_EDITOR` environment variable. If tha
 6. **Manual check:** staging a `.uss` containing `linear-gradient(` is rejected by the pre-commit hook with a `G-1` line.
 7. **Manual check:** adding a `Bowling.Gameplay → Bowling.BowlingPhysics` reference fails M-2.
 
-## 12. Plan-time refinements (2026-10-18, pending your approval with the plan)
+## 12. Plan-time refinements (2026-10-18, approved with the plan)
 
 Writing the implementation plan surfaced the changes now reflected above:
 
@@ -367,6 +368,19 @@ Writing the implementation plan surfaced the changes now reflected above:
 - G-6 reads PNG only.
 - Unity results judged from XML.
 - The helper scripts.
+
+### Execution-time changes (to review at merge)
+
+These rulings were made while the plan ran, and the sections above already reflect them:
+
+- **R12:** the UI module's `Runtime/Components/` holds one UI-component folder per component (section 4.2), and acceptance criterion 1 means zero compiler warnings (`warning CS`), as section 9 step 3 says.
+- **R14, R15:** G-5 and G-4 judge values, not key counts or stored intensities (section 8.1).
+- **R17:** G-6 only counts fully opaque 4-neighbours, so undefined colour under transparent pixels can't cause a false positive.
+- **R21, R21b:** a source updates its own observable state before it raises an event, and raises its change event on every actual change (the Testing fakes follow it; `Disarm` raises `PhaseChanged` when the phase changes).
+- **R22:** on a scored roll, Gameplay updates `Current` first, then raises `StateChanged`, `RollScored` and `SnapshotChanged` in that order (gameplay spec section 4).
+- **R24:** `verify.sh` deletes `Library/ScriptAssemblies` and `Library/Bee` before step 3, so the `warning CS` gate always sees compiler output.
+- **R25:** the text-rule holes are closed. M-6 covers every `.cs` under `Assets/`, G-2 scans all of `Assets/` and bans more patterns, G-1 rejects a `var()` blur in `text-shadow`, Tooling is excluded from the G rules only, G-6 scans all of `_Project`, and M-1 rejects `.asmref` files in `Modules/` and `.asmdef` files outside it (section 8).
+- **R26:** the results gate also fails on any inconclusive test (section 9).
 
 ## 13. Decisions made here (Claude's calls, please check)
 

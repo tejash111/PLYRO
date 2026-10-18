@@ -438,8 +438,9 @@ public interface IRollSimulator                    // implemented by BowlingPhys
 {
     PinMask Standing { get; }
     bool IsRolling { get; }
-    void SetBumpers(bool enabled);
-    void SetRack(PinMask standing);                // instant: standing pins on their spots, others removed, ball parked
+    void SetBumpers(bool enabled);                 // throws InvalidOperationException if IsRolling (only valid while Idle)
+    void SetRack(PinMask standing);                // instant: standing pins on their spots, others removed, ball parked;
+                                                   // throws InvalidOperationException if IsRolling (only valid while Idle)
     void Roll(in ThrowEvent throwEvent);           // throws InvalidOperationException if IsRolling
     event Action<RollMilestone> Milestone;
     event Action<ImpactEvent> Impact;
@@ -721,6 +722,9 @@ bowling/
 ├─ test-data/pose-recordings/   Git LFS
 └─ tools/
    ├─ checks/                   source-of-truth scripts (pre-commit + CI)
+   ├─ ci/                       verify.sh (the single entry point), Unity runner and test-results scripts
+   ├─ dev/                      developer machine checks (check-env.sh)
+   ├─ lib/                      shared shell helpers (assert.sh, unity_editor.sh)
    ├─ build/                    native build, Unity build, sign, notarize, DMG
    ├─ kiosk/                    launchd agent install/uninstall
    └─ spikes/                   throwaway spike code (never shipped)

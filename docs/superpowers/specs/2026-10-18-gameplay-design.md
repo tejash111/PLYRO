@@ -77,7 +77,7 @@ Every duration is a `GameplayTuning` field, with the default shown. Time comes f
 
 | State | On enter | Leaves when | Next |
 |---|---|---|---|
-| Attract | `throwSource.Disarm()`; `sim.SetBumpers(false)`; `sim.SetRack(All)` (only if `!sim.IsRolling`) | `input.IsPlayerPresent` becomes true | Join |
+| Attract | `throwSource.Disarm()`; then, only if `!sim.IsRolling` (both calls throw while a roll is in progress): `sim.SetBumpers(false)` and `sim.SetRack(All)` | `input.IsPlayerPresent` becomes true | Join |
 | Join | — | `joinGreeting` (1.0 s) elapses; or presence false | ModeSelect; or Attract |
 | ModeSelect | Selection preset to 1 player, 3 frames, default difficulty from settings | `SelectMode(...)` is called; or `modeSelectTimeout` (20 s) passes with the player present, which auto-selects the preset; or presence false for `modeSelectAbsent` (5 s) | Calibrate; Calibrate; Attract |
 | Calibrate | `calibrator.Begin()` | `Completed(profile)` stores the profile; on the first `Failed(Timeout)`, `Begin()` runs again; on a second `Failed(Timeout)`, `DefaultProfiles.For(...)` is used | AwaitReady; Calibrate; AwaitReady |
