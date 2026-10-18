@@ -18,7 +18,7 @@ No Contracts interfaces and no MonoBehaviours. Public types only:
 - `ValidationContext`: the repo root, project root, modules root, main scene path and the `ModuleRules`. `ForProject()` builds the context for the open project.
 - `ModuleRules`: a typed, strictly checked view of `tools/checks/module-rules.json` (modules and their asmdefs, allowed references per assembly, the test assembly rules, and the `$module`, `$moduleAllowed` and `$allRuntime` tokens). An `assemblies` key that ends in `*` is a prefix (`Bowling.App.Tests.*`).
 - `SourceOfTruthValidator`: `CreateRules()`, `RunAll(context)`, the menu item **Bowling > Validate Sources of Truth**, and `RunBatch()`, the headless entry point (`tools/ci/unity.sh exec Bowling.Tooling.Editor.SourceOfTruthValidator.RunBatch`, exit code 1 on any non-warning violation).
-- `ModuleStructureRule` (M-1): every module folder is listed in the rules, and every listed module has its README (the four template headings) and exactly its asmdefs, each with the name, root namespace, platforms and required fields of its kind.
+- `ModuleStructureRule` (M-1): every module folder is listed in the rules, and every listed module has its README (the four template headings) and exactly its asmdefs, each with the name, root namespace, platforms and required fields of its kind (a runtime asmdef other than Contracts references `Bowling.Contracts`, by name or by a GUID that resolves to it).
 - `AsmdefReferenceRule` (M-2): every asmdef references only what the rules allow its assembly, including `GUID:` references (resolved through the AssetDatabase), precompiled DLLs and `allowUnsafeCode`.
 
 ## Dependencies
@@ -30,7 +30,7 @@ No Contracts interfaces and no MonoBehaviours. Public types only:
 
 - `Editor/`: the editor-only assembly `Bowling.Tooling.Editor`.
 - `Editor/Setup/`: project setup utilities (package installer, manifest rules, the project settings baseline and its rendering and scene parts).
-- `Editor/Validation/`: the rule framework (`Violation`, `IValidationRule`, `ValidationContext`, `ModuleRules`, `SourceOfTruthValidator`) and its internal asmdef readers.
+- `Editor/Validation/`: the rule framework (`Violation`, `IValidationRule`, `ValidationContext`, `ModuleRules`, `SourceOfTruthValidator`) and its internal asmdef helpers (`AsmdefFile`, `ExpectedAsmdef`, and `AsmdefReferenceResolver`, the one place a `GUID:` reference becomes an assembly name).
 - `Editor/Validation/Rules/`: the rules, one per file (`ModuleStructureRule`, `AsmdefReferenceRule`).
 - `Tests/EditMode/`: EditMode tests for the module (`Bowling.Tooling.Tests.EditMode`).
 - `Tests/EditMode/Fixtures~/`: plain-file fixtures for the M-1 and M-2 tests (`M-1` and `M-2`, each with `pass` and `fail/<case>` folders). The `~` keeps Unity from importing them.

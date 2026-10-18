@@ -78,13 +78,18 @@ namespace Bowling.Tooling.Editor
             EditorApplication.Exit(exitCode);
         }
 
-        /// <summary>One log line per violation (warnings start with <c>WARN </c>, as in the text checks), then a summary.</summary>
+        /// <summary>
+        /// One log line per violation (warnings start with <c>WARN </c>, as in the text checks), then a summary.
+        /// Spec section 8 says one line per violation, so none of them carries a stack trace.
+        /// </summary>
         static void Report(IReadOnlyList<Violation> violations)
         {
             foreach (Violation violation in violations)
-                Debug.Log(violation.IsWarning ? $"WARN {violation}" : violation.ToString());
+                LogLine(violation.IsWarning ? $"WARN {violation}" : violation.ToString());
             int errors = violations.Count(v => !v.IsWarning);
-            Debug.Log($"Source-of-truth validation: {errors} violation(s), {violations.Count - errors} warning(s).");
+            LogLine($"Source-of-truth validation: {errors} violation(s), {violations.Count - errors} warning(s).");
         }
+
+        static void LogLine(string text) => Debug.LogFormat(LogType.Log, LogOption.NoStacktrace, null, "{0}", text);
     }
 }

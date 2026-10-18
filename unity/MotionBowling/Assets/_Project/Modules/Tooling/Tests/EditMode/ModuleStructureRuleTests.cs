@@ -3,6 +3,8 @@ using System.IO;
 using System.Linq;
 using Bowling.Tooling.Editor;
 using NUnit.Framework;
+using UnityEditor;
+using UnityEngine;
 
 namespace Bowling.Tooling.Tests
 {
@@ -46,6 +48,9 @@ namespace Bowling.Tooling.Tests
         [TestCase("unexpected-asmdef", "Bowling.Contracts.Extra.asmdef", "unexpected")]
         [TestCase("malformed-asmdef", "Bowling.Contracts.asmdef", "cannot read")]
         [TestCase("missing-module-folder", "Gameplay", "missing")]
+        // A runtime asmdef other than Contracts references Bowling.Contracts (Testing too).
+        [TestCase("no-contracts-reference", "Bowling.Gameplay.asmdef", "Bowling.Contracts")]
+        [TestCase("testing-no-contracts-reference", "Bowling.Testing.asmdef", "Bowling.Contracts")]
         public void FailureReportsExactlyOneViolationNamingTheFile(string fixture, string name, string messagePart)
         {
             List<Violation> violations = Run(ValidatorFixtures.M1("fail/" + fixture));
@@ -68,6 +73,86 @@ namespace Bowling.Tooling.Tests
 
             Assert.That(violations, Has.Count.EqualTo(1));
             Assert.That(violations[0].Message, Does.Contain("not found"));
+        }
+
+        // --- The Contracts reference by GUID ---
+        // No Bowling.Contracts asmdef exists yet, and a real one would recompile the project mid-test. So the
+        // GUID points at a text asset under Assets/_TestTemp that holds asmdef JSON: the resolver only reads its name.
+
+        const string ToolingEditorAsmdef = "Assets/_Project/Modules/Tooling/Editor/Bowling.Tooling.Editor.asmdef";
+        const string TempAssets = "Assets/_TestTemp";
+
+        string _tempDir;
+        bool _importedTempAsset;
+
+        [TearDown]
+        public void TearDown()
+        {
+            if (_tempDir != null && Directory.Exists(_tempDir)) Directory.Delete(_tempDir, true);
+            if (_importedTempAsset) AssetDatabase.DeleteAsset(TempAssets);
+        }
+
+        [Test]
+        public void ContractsReferencedByAGuidThatResolvesToItPasses()
+        {
+            string guid = ImportAsmdefText("Bowling.Contracts");
+
+            List<Violation> violations = Run(TempGameplayModule("GUID:" + guid));
+
+            Assert.That(violations, Is.Empty, string.Join("\n", violations));
+        }
+
+        [Test]
+        public void AGuidThatResolvesToAnotherAssemblyIsNotTheContractsReference()
+        {
+            string guid = AssetDatabase.AssetPathToGUID(ToolingEditorAsmdef);
+            Assume.That(guid, Is.Not.Empty);
+
+            List<Violation> violations = Run(TempGameplayModule("GUID:" + guid));
+
+            Assert.That(violations, Has.Count.EqualTo(1), string.Join("\n", violations));
+            Assert.That(violations[0].Path, Does.EndWith("/Bowling.Gameplay.asmdef"));
+            Assert.That(violations[0].Message, Does.Contain("Bowling.Contracts"));
+        }
+
+        [Test]
+        public void AGuidThatCannotBeResolvedIsNotTheContractsReference()
+        {
+            List<Violation> violations = Run(TempGameplayModule("GUID:00000000000000000000000000000001"));
+
+            Assert.That(violations, Has.Count.EqualTo(1), string.Join("\n", violations));
+            Assert.That(violations[0].Message, Does.Contain("Bowling.Contracts"));
+        }
+
+        string ImportAsmdefText(string assemblyName)
+        {
+            Directory.CreateDirectory(Path.Combine(Application.dataPath, "_TestTemp"));
+            string assetPath = $"{TempAssets}/{assemblyName}.asmdef.txt";
+            File.WriteAllText(Path.Combine(Application.dataPath, "_TestTemp", assemblyName + ".asmdef.txt"),
+                "{ \"name\": \"" + assemblyName + "\" }");
+            _importedTempAsset = true;
+            AssetDatabase.ImportAsset(assetPath);
+            string guid = AssetDatabase.AssetPathToGUID(assetPath);
+            Assume.That(guid, Is.Not.Empty);
+            return guid;
+        }
+
+        /// <summary>A complete runtime-only module <c>Gameplay</c> in a temp folder, whose one reference is the given entry.</summary>
+        ValidationContext TempGameplayModule(string reference)
+        {
+            _tempDir = Path.Combine(Path.GetTempPath(), "bowling-m1-" + System.Guid.NewGuid().ToString("N"));
+            string module = Path.Combine(_tempDir, "Modules", "Gameplay");
+            Directory.CreateDirectory(Path.Combine(module, "Runtime"));
+            File.WriteAllText(Path.Combine(module, "README.md"),
+                "# Gameplay\n\n## Purpose\n\n## Public API\n\n## Dependencies\n\n## Folder map\n");
+            File.WriteAllText(Path.Combine(module, "Runtime", "Bowling.Gameplay.asmdef"),
+                "{ \"name\": \"Bowling.Gameplay\", \"rootNamespace\": \"Bowling.Gameplay\", \"references\": [ \"" + reference + "\" ],"
+                + " \"includePlatforms\": [], \"overrideReferences\": true, \"autoReferenced\": false }");
+            string rules = Path.Combine(_tempDir, "module-rules.json");
+            File.WriteAllText(rules,
+                "{ \"modules\": { \"Gameplay\": { \"runtime\": true, \"editor\": false, \"editMode\": false, \"playMode\": false } },"
+                + " \"assemblies\": {}, \"testAssemblies\": { \"references\": [], \"precompiled\": [] } }");
+            return ValidatorFixtures.Context(rules, _tempDir);
         }
     }
 }

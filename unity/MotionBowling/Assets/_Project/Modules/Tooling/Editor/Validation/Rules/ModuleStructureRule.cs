@@ -9,7 +9,8 @@ namespace Bowling.Tooling.Editor
     /// <summary>
     /// M-1: every module folder under <c>Modules/</c> is listed in <c>module-rules.json</c>, and every listed
     /// module has its README (the four template headings) and exactly the asmdefs of foundation spec section 4,
-    /// with the <c>name</c>, <c>rootNamespace</c>, <c>includePlatforms</c> and required fields of their kind.
+    /// with the <c>name</c>, <c>rootNamespace</c>, <c>includePlatforms</c> and required fields of their kind
+    /// (a runtime asmdef other than Contracts references <c>Bowling.Contracts</c>).
     /// Which asmdefs a module has comes from its flags in <c>module-rules.json</c>. A module folder that is
     /// missing is one violation for the folder, not one per file.
     /// </summary>
@@ -17,6 +18,7 @@ namespace Bowling.Tooling.Editor
     {
         const string IncludeTests = "UNITY_INCLUDE_TESTS";
         const string NUnit = "nunit.framework.dll";
+        const string ContractsAssembly = "Bowling.Contracts";
 
         static readonly string[] ReadmeSections = { "Purpose", "Public API", "Dependencies", "Folder map" };
         static readonly Regex HeadingLine = new Regex(@"^ {0,3}(#{1,6})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$");
@@ -149,9 +151,13 @@ namespace Bowling.Tooling.Editor
                 if (!asmdef.DefineConstraints.Contains(IncludeTests))
                     violations.Add(Fail(path, asmdef.LineOf("defineConstraints"), $"defineConstraints must include {IncludeTests}"));
             }
-            else if (expected.Kind == ExpectedAsmdef.AsmdefKind.Runtime && info.IsTestOnly && !asmdef.DefineConstraints.Contains(IncludeTests))
+            else if (expected.Kind == ExpectedAsmdef.AsmdefKind.Runtime)
             {
-                violations.Add(Fail(path, asmdef.LineOf("defineConstraints"), $"defineConstraints must include {IncludeTests}, so the test-only assembly never ships"));
+                // Spec section 4, kind table: a runtime asmdef references Bowling.Contracts (Contracts itself nothing).
+                if (expected.AssemblyName != ContractsAssembly && !AsmdefReferenceResolver.ReferencesAssembly(asmdef.References, ContractsAssembly))
+                    violations.Add(Fail(path, asmdef.LineOf("references"), $"references must include {ContractsAssembly} (by name, or by a GUID that resolves to it)"));
+                if (info.IsTestOnly && !asmdef.DefineConstraints.Contains(IncludeTests))
+                    violations.Add(Fail(path, asmdef.LineOf("defineConstraints"), $"defineConstraints must include {IncludeTests}, so the test-only assembly never ships"));
             }
         }
 

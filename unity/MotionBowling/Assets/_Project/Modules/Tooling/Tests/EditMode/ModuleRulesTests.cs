@@ -90,6 +90,61 @@ namespace Bowling.Tooling.Tests
             Assert.That(rules.FindAssembly("Bowling.Tooling.Editor").Precompiled, Is.EqualTo(new[] { "Newtonsoft.Json.dll" }));
         }
 
+        // Task 9 builds every real asmdef against this file, so the whole allowed-reference table is pinned.
+        // References are compared as sets (order is free); a token such as $allRuntime is compared as written.
+        [Test]
+        public void RealFileHasExactlyTheAssemblyEntriesOfSpecSection4()
+        {
+            ModuleRules rules = RealRules();
+            const string urpRuntime = "Unity.RenderPipelines.Universal.Runtime";
+            const string urpCore = "Unity.RenderPipelines.Core.Runtime";
+            const string contracts = "Bowling.Contracts";
+            const string newtonsoft = "Newtonsoft.Json.dll";
+            var none = new string[0];
+
+            Assert.That(rules.Assemblies.Keys, Is.EquivalentTo(new[]
+            {
+                "Bowling.Contracts", "Bowling.PoseInput", "Bowling.ThrowDetection", "Bowling.BowlingPhysics",
+                "Bowling.Gameplay", "Bowling.Presentation", "Bowling.UI", "Bowling.Platform", "Bowling.App",
+                "Bowling.App.Editor", "Bowling.Tooling.Editor", "Bowling.Testing", "Bowling.App.Tests.*",
+            }));
+            AssertAssembly(rules, "Bowling.Contracts", none, none, false);
+            AssertAssembly(rules, "Bowling.PoseInput", new[] { contracts }, new[] { newtonsoft }, true);
+            AssertAssembly(rules, "Bowling.ThrowDetection", new[] { contracts }, none, false);
+            AssertAssembly(rules, "Bowling.BowlingPhysics", new[] { contracts }, none, false);
+            AssertAssembly(rules, "Bowling.Gameplay", new[] { contracts }, none, false);
+            AssertAssembly(rules, "Bowling.Presentation",
+                new[] { contracts, "Unity.Cinemachine", "FMODUnity", urpRuntime, urpCore }, none, false);
+            AssertAssembly(rules, "Bowling.UI", new[] { contracts }, none, false);
+            AssertAssembly(rules, "Bowling.Platform", new[] { contracts, "Unity.InputSystem" }, new[] { newtonsoft }, false);
+            AssertAssembly(rules, "Bowling.App", new[] { ModuleRules.AllRuntimeToken, "Unity.InputSystem" }, none, false);
+            AssertAssembly(rules, "Bowling.App.Editor", new[] { ModuleRules.AllRuntimeToken }, none, false);
+            AssertAssembly(rules, "Bowling.Tooling.Editor", new[] { urpRuntime, urpCore }, new[] { newtonsoft }, false);
+            AssertAssembly(rules, "Bowling.Testing", new[] { contracts }, none, false);
+            AssertAssembly(rules, "Bowling.App.Tests.*", new[] { ModuleRules.AllRuntimeToken }, none, false);
+        }
+
+        [Test]
+        public void RealFileHasExactlyTheTestAssemblyLists()
+        {
+            ModuleRules.AssemblyInfo tests = RealRules().TestAssemblies;
+
+            Assert.That(tests.References, Is.EqualTo(new[]
+            {
+                ModuleRules.ModuleToken, ModuleRules.ModuleAllowedToken, "Bowling.Contracts", "Bowling.Testing",
+                "UnityEngine.TestRunner", "UnityEditor.TestRunner", "Unity.PerformanceTesting",
+            }));
+            Assert.That(tests.Precompiled, Is.EqualTo(new[] { "nunit.framework.dll", "Newtonsoft.Json.dll" }));
+        }
+
+        static void AssertAssembly(ModuleRules rules, string name, string[] references, string[] precompiled, bool allowUnsafeCode)
+        {
+            ModuleRules.AssemblyInfo info = rules.Assemblies[name];
+            Assert.That(info.References, Is.EquivalentTo(references), name + " references");
+            Assert.That(info.Precompiled, Is.EquivalentTo(precompiled), name + " precompiled");
+            Assert.That(info.AllowUnsafeCode, Is.EqualTo(allowUnsafeCode), name + " allowUnsafeCode");
+        }
+
         [Test]
         public void AllRuntimeIsEveryRuntimeAssemblyExceptTheTestOnlyOne()
         {

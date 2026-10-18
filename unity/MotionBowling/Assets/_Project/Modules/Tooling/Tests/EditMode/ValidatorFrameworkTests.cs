@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using Bowling.Tooling.Editor;
 using NUnit.Framework;
+using UnityEngine;
 
 namespace Bowling.Tooling.Tests
 {
@@ -32,6 +34,33 @@ namespace Bowling.Tooling.Tests
             public string Id => "X-9";
 
             public IEnumerable<Violation> Run(ValidationContext context) => throw new InvalidOperationException("boom");
+        }
+
+        [Test]
+        public void EveryReportedLineIsOneLogMessageWithoutAStackTrace()
+        {
+            // The menu entry runs the rules on the real project and reports through the same code as RunBatch.
+            // Whatever the project's state, it ends with the summary line, and no line may carry a stack trace.
+            var lines = new List<(string Text, string StackTrace)>();
+            void Capture(string text, string stackTrace, LogType type)
+            {
+                if (Regex.IsMatch(text, @"^([A-Z]-\d|WARN |Source-of-truth validation:)")) lines.Add((text, stackTrace));
+            }
+
+            Application.logMessageReceived += Capture;
+            try
+            {
+                SourceOfTruthValidator.RunFromMenu();
+            }
+            finally
+            {
+                Application.logMessageReceived -= Capture;
+            }
+
+            Assert.That(lines, Is.Not.Empty);
+            Assert.That(lines.Last().Text, Does.StartWith("Source-of-truth validation:"));
+            Assert.That(lines.All(l => string.IsNullOrEmpty(l.StackTrace)), Is.True, "a reported line has a stack trace");
+            Assert.That(lines.Any(l => l.Text.Contains("\n")), Is.False, "a reported line spans several lines");
         }
 
         [Test]

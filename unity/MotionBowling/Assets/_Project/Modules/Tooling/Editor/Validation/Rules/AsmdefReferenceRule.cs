@@ -2,9 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text.RegularExpressions;
-using UnityEditor;
-using UnityEngine;
 
 namespace Bowling.Tooling.Editor
 {
@@ -12,15 +9,12 @@ namespace Bowling.Tooling.Editor
     /// M-2: an asmdef references only what <c>module-rules.json</c> allows its assembly (foundation spec,
     /// section 4): assemblies, precompiled DLLs and <c>allowUnsafeCode</c>. It judges the asmdefs M-1 expects,
     /// by their expected identity, so a misnamed asmdef is M-1's finding and not also an unknown assembly here.
-    /// A <c>GUID:&lt;32 hex&gt;</c> reference is resolved to an assembly name through the AssetDatabase; one that
-    /// can't be resolved is a violation, because nothing can then be said about what it references.
+    /// A <c>GUID:&lt;32 hex&gt;</c> reference is resolved to an assembly name through
+    /// <see cref="AsmdefReferenceResolver"/>; one that can't be resolved is a violation, because nothing can
+    /// then be said about what it references.
     /// </summary>
     public sealed class AsmdefReferenceRule : IValidationRule
     {
-        const string GuidPrefix = "GUID:";
-
-        static readonly Regex GuidReference = new Regex("^GUID:[0-9a-fA-F]{32}$");
-
         sealed class Allowed
         {
             public Allowed(IEnumerable<string> references, IEnumerable<string> precompiled, bool allowUnsafeCode)
@@ -82,8 +76,7 @@ namespace Bowling.Tooling.Editor
             foreach (string reference in asmdef.References)
             {
                 int line = asmdef.LineOf("references", reference);
-                string name = reference;
-                if (reference.StartsWith(GuidPrefix, StringComparison.Ordinal) && !TryResolveGuid(reference, out name))
+                if (!AsmdefReferenceResolver.TryResolve(reference, out string name))
                 {
                     violations.Add(Fail(path, line, $"unresolvable GUID reference '{reference}'"));
                     continue;
@@ -122,26 +115,6 @@ namespace Bowling.Tooling.Editor
                 precompiled.AddRange(own.Precompiled);
             }
             return new Allowed(references, precompiled, own != null && own.AllowUnsafeCode);
-        }
-
-        /// <summary>Resolves <c>GUID:&lt;hex&gt;</c> to the <c>name</c> of the asmdef asset with that GUID.</summary>
-        static bool TryResolveGuid(string reference, out string assemblyName)
-        {
-            assemblyName = null;
-            if (!GuidReference.IsMatch(reference)) return false;
-            string assetPath = AssetDatabase.GUIDToAssetPath(reference.Substring(GuidPrefix.Length));
-            if (string.IsNullOrEmpty(assetPath)) return false;
-            TextAsset asset = AssetDatabase.LoadAssetAtPath<TextAsset>(assetPath);
-            if (asset == null) return false;
-            try
-            {
-                assemblyName = AsmdefFile.Parse(asset.text).Name;
-            }
-            catch (FormatException)
-            {
-                return false;
-            }
-            return !string.IsNullOrEmpty(assemblyName);
         }
 
         Violation Fail(string path, int line, string message) => new Violation(Id, path, line, message, false);
