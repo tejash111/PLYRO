@@ -1,0 +1,24 @@
+{
+    "name": "Bowling.App",
+    "rootNamespace": "Bowling.App",
+    "references": [
+        "Bowling.Contracts",
+        "Bowling.PoseInput",
+        "Bowling.ThrowDetection",
+        "Bowling.BowlingPhysics",
+        "Bowling.Gameplay",
+        "Bowling.Presentation",
+        "Bowling.UI",
+        "Bowling.Platform",
+        "Unity.InputSystem"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

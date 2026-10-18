@@ -1,0 +1,16 @@
+{
+    "modules": {
+        "Contracts": {
+            "runtime": true,
+            "editor": false,
+            "editMode": true,
+            "playMode": false,
+            "testOnly": false
+        }
+    },
+    "assemblies": {},
+    "testAssemblies": {
+        "references": [],
+        "precompiled": []
+    }
+}

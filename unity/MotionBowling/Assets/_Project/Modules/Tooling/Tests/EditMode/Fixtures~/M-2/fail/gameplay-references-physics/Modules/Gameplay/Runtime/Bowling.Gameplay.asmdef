@@ -1,0 +1,17 @@
+{
+    "name": "Bowling.Gameplay",
+    "rootNamespace": "Bowling.Gameplay",
+    "references": [
+        "Bowling.Contracts",
+        "Bowling.BowlingPhysics"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

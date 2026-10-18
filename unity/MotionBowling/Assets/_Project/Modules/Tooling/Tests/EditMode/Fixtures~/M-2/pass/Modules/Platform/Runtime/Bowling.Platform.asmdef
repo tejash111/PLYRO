@@ -1,0 +1,19 @@
+{
+    "name": "Bowling.Platform",
+    "rootNamespace": "Bowling.Platform",
+    "references": [
+        "Bowling.Contracts",
+        "Unity.InputSystem"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "Newtonsoft.Json.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

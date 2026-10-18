@@ -1,0 +1,44 @@
+{
+    "modules": {
+        "Contracts": {
+            "runtime": true,
+            "editor": false,
+            "editMode": true,
+            "playMode": false,
+            "testOnly": false
+        },
+        "BowlingPhysics": {
+            "runtime": true,
+            "editor": false,
+            "editMode": true,
+            "playMode": true,
+            "testOnly": false
+        },
+        "App": {
+            "runtime": true,
+            "editor": true,
+            "editMode": true,
+            "playMode": true,
+            "testOnly": false
+        },
+        "Tooling": {
+            "runtime": false,
+            "editor": true,
+            "editMode": true,
+            "playMode": false,
+            "testOnly": false
+        },
+        "Testing": {
+            "runtime": true,
+            "editor": false,
+            "editMode": true,
+            "playMode": false,
+            "testOnly": true
+        }
+    },
+    "assemblies": {},
+    "testAssemblies": {
+        "references": [],
+        "precompiled": []
+    }
+}

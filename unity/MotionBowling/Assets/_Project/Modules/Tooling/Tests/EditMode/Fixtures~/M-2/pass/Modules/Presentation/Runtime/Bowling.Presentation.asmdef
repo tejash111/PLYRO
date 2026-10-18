@@ -1,0 +1,20 @@
+{
+    "name": "Bowling.Presentation",
+    "rootNamespace": "Bowling.Presentation",
+    "references": [
+        "Bowling.Contracts",
+        "Unity.Cinemachine",
+        "FMODUnity",
+        "Unity.RenderPipelines.Universal.Runtime",
+        "Unity.RenderPipelines.Core.Runtime"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

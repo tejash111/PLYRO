@@ -1,0 +1,48 @@
+{
+  "modules": {
+    "Contracts":      { "runtime": true,  "editor": false, "editMode": true, "playMode": false, "testOnly": false },
+    "PoseInput":      { "runtime": true,  "editor": false, "editMode": true, "playMode": false, "testOnly": false },
+    "ThrowDetection": { "runtime": true,  "editor": false, "editMode": true, "playMode": false, "testOnly": false },
+    "BowlingPhysics": { "runtime": true,  "editor": false, "editMode": true, "playMode": true,  "testOnly": false },
+    "Gameplay":       { "runtime": true,  "editor": false, "editMode": true, "playMode": false, "testOnly": false },
+    "Presentation":   { "runtime": true,  "editor": false, "editMode": true, "playMode": true,  "testOnly": false },
+    "UI":             { "runtime": true,  "editor": false, "editMode": true, "playMode": true,  "testOnly": false },
+    "Platform":       { "runtime": true,  "editor": false, "editMode": true, "playMode": false, "testOnly": false },
+    "App":            { "runtime": true,  "editor": true,  "editMode": true, "playMode": true,  "testOnly": false },
+    "Tooling":        { "runtime": false, "editor": true,  "editMode": true, "playMode": false, "testOnly": false },
+    "Testing":        { "runtime": true,  "editor": false, "editMode": true, "playMode": false, "testOnly": true }
+  },
+  "assemblies": {
+    "Bowling.Contracts":      { "references": [], "precompiled": [], "allowUnsafeCode": false },
+    "Bowling.PoseInput":      { "references": ["Bowling.Contracts"], "precompiled": ["Newtonsoft.Json.dll"], "allowUnsafeCode": true },
+    "Bowling.ThrowDetection": { "references": ["Bowling.Contracts"], "precompiled": [], "allowUnsafeCode": false },
+    "Bowling.BowlingPhysics": { "references": ["Bowling.Contracts"], "precompiled": [], "allowUnsafeCode": false },
+    "Bowling.Gameplay":       { "references": ["Bowling.Contracts"], "precompiled": [], "allowUnsafeCode": false },
+    "Bowling.Presentation":   {
+      "references": [
+        "Bowling.Contracts",
+        "Unity.Cinemachine",
+        "FMODUnity",
+        "Unity.RenderPipelines.Universal.Runtime",
+        "Unity.RenderPipelines.Core.Runtime"
+      ],
+      "precompiled": [],
+      "allowUnsafeCode": false
+    },
+    "Bowling.UI":             { "references": ["Bowling.Contracts"], "precompiled": [], "allowUnsafeCode": false },
+    "Bowling.Platform":       { "references": ["Bowling.Contracts", "Unity.InputSystem"], "precompiled": ["Newtonsoft.Json.dll"], "allowUnsafeCode": false },
+    "Bowling.App":            { "references": ["$allRuntime", "Unity.InputSystem"], "precompiled": [], "allowUnsafeCode": false },
+    "Bowling.App.Editor":     { "references": ["$allRuntime"], "precompiled": [], "allowUnsafeCode": false },
+    "Bowling.Tooling.Editor": {
+      "references": ["Unity.RenderPipelines.Universal.Runtime", "Unity.RenderPipelines.Core.Runtime"],
+      "precompiled": ["Newtonsoft.Json.dll"],
+      "allowUnsafeCode": false
+    },
+    "Bowling.Testing":        { "references": ["Bowling.Contracts"], "precompiled": [], "allowUnsafeCode": false },
+    "Bowling.App.Tests.*":    { "references": ["$allRuntime"], "precompiled": [], "allowUnsafeCode": false }
+  },
+  "testAssemblies": {
+    "references": ["$module", "$moduleAllowed", "Bowling.Contracts", "Bowling.Testing", "UnityEngine.TestRunner", "UnityEditor.TestRunner", "Unity.PerformanceTesting"],
+    "precompiled": ["nunit.framework.dll", "Newtonsoft.Json.dll"]
+  }
+}

@@ -1,0 +1,28 @@
+{
+    "name": "Bowling.Gameplay.Tests.EditMode",
+    "rootNamespace": "Bowling.Gameplay.Tests",
+    "references": [
+        "Bowling.Gameplay",
+        "Bowling.Contracts",
+        "Bowling.Testing",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner",
+        "Unity.PerformanceTesting"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll",
+        "Newtonsoft.Json.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
