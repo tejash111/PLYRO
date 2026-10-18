@@ -6,7 +6,7 @@ The shared vocabulary of the game: data types, enums, interfaces and the lane ge
 
 ## Public API
 
-Defined exactly by system design section 6, one type per file under `Runtime/<Area>/`. The module is a skeleton for now: the types arrive with the Contracts task of sub-project 1. The areas are:
+Defined exactly by system design section 6, one type per file under `Runtime/<Area>/`, all in the namespace `Bowling.Contracts`. Every `readonly struct` has one public constructor taking all its fields in declaration order. The areas are:
 
 - `Pose/` (6.1): pose and landmark data types.
 - `Input/` (6.2): `ITrackingSource`, `IPlayerInput`, `IPlayerCalibrator`, `IHandCursor`, `ICameraPreview`, `ITrackingDiagnostics`, `IRecordingIndicator` and their data types.
@@ -25,5 +25,7 @@ No MonoBehaviours.
 
 ## Folder map
 
-- `Runtime/`: the runtime assembly `Bowling.Contracts`. For now it holds only `AssemblyInfo.cs` (`InternalsVisibleTo` for the test assemblies); the `<Area>/` folders arrive with the types.
-- `Tests/EditMode/`: EditMode tests for the module (`Bowling.Contracts.Tests.EditMode`).
+- `Runtime/`: the runtime assembly `Bowling.Contracts`.
+  - `AssemblyInfo.cs`: `InternalsVisibleTo` for the test assemblies.
+  - `<Area>/`: the types, one per file (`Pose/`, `Input/`, `Throw/`, `Roll/`, `Game/`, `Platform/`, `Lane/`).
+- `Tests/EditMode/`: EditMode tests for the module (`Bowling.Contracts.Tests.EditMode`): `PinMaskExtensions`, `LaneSpec.PinSpot`, `RollResult.PinsKnocked`, and a reflection check that every `readonly struct` has its full constructor.
