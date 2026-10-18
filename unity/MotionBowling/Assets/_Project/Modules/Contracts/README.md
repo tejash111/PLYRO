@@ -10,11 +10,13 @@ Defined exactly by system design section 6, one type per file under `Runtime/<Ar
 
 - `Pose/` (6.1): pose and landmark data types.
 - `Input/` (6.2): `ITrackingSource`, `IPlayerInput`, `IPlayerCalibrator`, `IHandCursor`, `ICameraPreview`, `ITrackingDiagnostics`, `IRecordingIndicator` and their data types.
-- `Throw/` (6.3): `IThrowSource`, `ThrowEvent` and the throw data types.
+- `Throw/` (6.3): `IThrowSource`, `ThrowEvent`, `ThrowContext`, `Difficulty`, `DifficultyProfile`, `SwingPhase` and `ThrowRejection`.
 - `Roll/` (6.4): `IRollSimulator`, `IRollBodies`, `PinMask`, `RollResult` and the roll events.
-- `Game/` (6.5): `IGameEvents`, `IGameCommands`, `IUiCues` and the game state and snapshot types.
-- `Platform/` (6.6): `IClock`, `IGameLog`, `ILeaderboardStore`, `ISettingsStore`, `IOperatorActions` and their data types.
+- `Game/` (6.5): `IGameEvents`, `IGameCommands`, `IUiCues` and the data types `GameState`, `GameSnapshot`, `PlayerSnapshot`, `FrameView`, `RollMark`, `MarkKind`, `RollOutcome` and `UiCue`.
+- `Platform/` (6.6): `IClock`, `IGameLog`, `ILeaderboardStore`, `ISettingsStore`, `IOperatorActions` and the data types `LeaderboardEntry`, `LeaderboardScope` and `OperatorSettings`.
 - `Lane/` (6.7): `LaneSpec`, the physical lane constants and `PinSpot`.
+
+The snapshot, frame and settings types (`GameSnapshot`, `PlayerSnapshot`, `FrameView`, `LeaderboardEntry`, `OperatorSettings`) are classes with public fields and no constructor. `OperatorSettings` carries the spec defaults: `SchemaVersion = 1`, `CameraUniqueId = null`, `DefaultDifficulty = Casual`, `MasterVolume = 0.8f`, `PoseRecordingEnabled = false`.
 
 No MonoBehaviours.
 
@@ -28,4 +30,4 @@ No MonoBehaviours.
 - `Runtime/`: the runtime assembly `Bowling.Contracts`.
   - `AssemblyInfo.cs`: `InternalsVisibleTo` for the test assemblies.
   - `<Area>/`: the types, one per file (`Pose/`, `Input/`, `Throw/`, `Roll/`, `Game/`, `Platform/`, `Lane/`).
-- `Tests/EditMode/`: EditMode tests for the module (`Bowling.Contracts.Tests.EditMode`): `PinMaskExtensions`, `LaneSpec.PinSpot`, `RollResult.PinsKnocked`, and a reflection check that every `readonly struct` has its full constructor.
+- `Tests/EditMode/`: EditMode tests for the module (`Bowling.Contracts.Tests.EditMode`): `PinMaskExtensions`, `LaneSpec.PinSpot`, `RollResult.PinsKnocked`, the `OperatorSettings` defaults, and a reflection check that every `readonly struct` has its full constructor.
