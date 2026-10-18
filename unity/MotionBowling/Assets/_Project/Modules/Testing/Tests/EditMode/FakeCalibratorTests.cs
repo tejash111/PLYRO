@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Bowling.Contracts;
 using NUnit.Framework;
@@ -64,6 +65,7 @@ namespace Bowling.Testing.Tests
         public void CompleteDeliversTheProfile()
         {
             var calibrator = new FakeCalibrator();
+            calibrator.Begin();
             PlayerProfile received = default;
             calibrator.Completed += profile => received = profile;
 
@@ -92,18 +94,20 @@ namespace Bowling.Testing.Tests
         public void CompletedHandlerMayBeginAgainAndTheNewStepSticks()
         {
             var calibrator = new FakeCalibrator();
+            calibrator.Begin();
             calibrator.Completed += profile => calibrator.Begin();
 
             calibrator.Complete(Profile);
 
             Assert.AreEqual(CalibrationStep.WaitingForFullBody, calibrator.Step, "nothing overwrites it after the handler");
-            Assert.AreEqual(1, calibrator.BeginCount);
+            Assert.AreEqual(2, calibrator.BeginCount, "one Begin to start, one from the handler");
         }
 
         [Test]
         public void FailedHandlerMayBeginAgainAndTheNewStepSticks()
         {
             var calibrator = new FakeCalibrator();
+            calibrator.Begin();
             calibrator.Failed += reason => calibrator.Begin();
 
             calibrator.Fail(CalibrationFailure.Timeout);
@@ -131,6 +135,7 @@ namespace Bowling.Testing.Tests
         public void CancelAfterCompleteReturnsToIdleWithAnEvent()
         {
             var calibrator = new FakeCalibrator();
+            calibrator.Begin();
             calibrator.Complete(Profile);
             List<string> events = Record(calibrator);
 
@@ -153,14 +158,109 @@ namespace Bowling.Testing.Tests
         public void BeginAfterCompleteRestartsTheFlowWithAnEvent()
         {
             var calibrator = new FakeCalibrator();
+            calibrator.Begin();
             calibrator.Complete(Profile);
             List<string> events = Record(calibrator);
 
             calibrator.Begin();
 
             Assert.AreEqual(CalibrationStep.WaitingForFullBody, calibrator.Step);
-            Assert.AreEqual(1, calibrator.BeginCount);
+            Assert.AreEqual(2, calibrator.BeginCount);
             Assert.That(events, Is.EqualTo(new[] { "StepChanged:WaitingForFullBody:WaitingForFullBody" }));
+        }
+
+        // Complete and Fail are only valid while a calibration is in progress (Step is not Idle, Done or Failed),
+        // like the real calibrator. Without the guard a test could pass by completing a calibration nobody began.
+        // A refused call changes nothing: no step change, no event.
+
+        private static void AssertRefused(FakeCalibrator calibrator, List<string> events, CalibrationStep step, TestDelegate call)
+        {
+            int before = events.Count;
+
+            var exception = Assert.Throws<InvalidOperationException>(call);
+
+            Assert.That(exception.Message, Does.Contain(step.ToString()), "the message names the step");
+            Assert.AreEqual(step, calibrator.Step, "a refused call leaves the step alone");
+            Assert.AreEqual(before, events.Count, "a refused call raises nothing");
+        }
+
+        [Test]
+        public void CompleteAndFailAreRefusedBeforeAnyBegin()
+        {
+            var calibrator = new FakeCalibrator();
+            List<string> events = Record(calibrator);
+
+            AssertRefused(calibrator, events, CalibrationStep.Idle, () => calibrator.Complete(Profile));
+            AssertRefused(calibrator, events, CalibrationStep.Idle, () => calibrator.Fail(CalibrationFailure.Timeout));
+        }
+
+        [Test]
+        public void CompleteAndFailAreRefusedAfterCancel()
+        {
+            var calibrator = new FakeCalibrator();
+            calibrator.Begin();
+            calibrator.Cancel();
+            List<string> events = Record(calibrator);
+
+            AssertRefused(calibrator, events, CalibrationStep.Idle, () => calibrator.Complete(Profile));
+            AssertRefused(calibrator, events, CalibrationStep.Idle, () => calibrator.Fail(CalibrationFailure.PlayerLeft));
+        }
+
+        [Test]
+        public void CompleteAndFailAreRefusedAfterComplete()
+        {
+            var calibrator = new FakeCalibrator();
+            calibrator.Begin();
+            calibrator.Complete(Profile);
+            List<string> events = Record(calibrator);
+
+            AssertRefused(calibrator, events, CalibrationStep.Done, () => calibrator.Complete(Profile));
+            AssertRefused(calibrator, events, CalibrationStep.Done, () => calibrator.Fail(CalibrationFailure.TrackingLost));
+        }
+
+        [Test]
+        public void CompleteAndFailAreRefusedAfterFail()
+        {
+            var calibrator = new FakeCalibrator();
+            calibrator.Begin();
+            calibrator.Fail(CalibrationFailure.Timeout);
+            List<string> events = Record(calibrator);
+
+            AssertRefused(calibrator, events, CalibrationStep.Failed, () => calibrator.Complete(Profile));
+            AssertRefused(calibrator, events, CalibrationStep.Failed, () => calibrator.Fail(CalibrationFailure.Timeout));
+        }
+
+        [Test]
+        public void AFinishedCalibrationCanBeBegunAndFinishedAgain()
+        {
+            var calibrator = new FakeCalibrator();
+            calibrator.Begin();
+            calibrator.Fail(CalibrationFailure.Timeout);
+
+            calibrator.Begin();
+            calibrator.Complete(Profile);
+
+            Assert.AreEqual(CalibrationStep.Done, calibrator.Step);
+            Assert.AreEqual(2, calibrator.BeginCount);
+        }
+
+        [Test]
+        public void CompleteFromAHandlerOfTheSameCalibrationIsRefused()
+        {
+            // By the time StepChanged(Done) or Completed runs, the calibration is over: a second outcome is a bug.
+            var calibrator = new FakeCalibrator();
+            calibrator.Begin();
+            Exception thrown = null;
+            calibrator.Completed += profile =>
+            {
+                try { calibrator.Fail(CalibrationFailure.Timeout); }
+                catch (InvalidOperationException e) { thrown = e; }
+            };
+
+            calibrator.Complete(Profile);
+
+            Assert.That(thrown, Is.Not.Null);
+            Assert.AreEqual(CalibrationStep.Done, calibrator.Step);
         }
     }
 }

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Test-only fakes for every Contracts interface, so each module can be built and tested without the others. Every fake is a plain C# class that is deterministic and controllable from tests. The assembly is constrained to `UNITY_INCLUDE_TESTS`, so it never ships in a build.
+Test-only fakes for the Contracts interfaces (all but `IRollBodies`, which hands out scene `Transform`s and has no fake), so each module can be built and tested without the others. Every fake is a plain C# class that is deterministic and controllable from tests. The assembly is constrained to `UNITY_INCLUDE_TESTS`, so it never ships in a build.
 
 ## Public API
 
@@ -12,7 +12,7 @@ No MonoBehaviours. Every type is a public class in the namespace `Bowling.Testin
 - Input:
   - `FakeTrackingSource` (`ITrackingSource`): `Push(PoseSample)`, `SetStatus`; `Start`/`Stop` set `Running`/`Stopped` and are counted in `StartCount`/`StopCount`. Starts `Stopped`.
   - `FakePlayerInput` (`IPlayerInput`): `SetPresent`, `SetStatus` (events only when the value changes), `PushPose(PlayerPose)`. Starts `Stopped`, absent, with no pose.
-  - `FakeCalibrator` (`IPlayerCalibrator`): `Complete(profile)`, `Fail(reason)`, `HoldProgress` setter; `BeginCount`. `Begin` and `Cancel` raise `StepChanged` when the step changes.
+  - `FakeCalibrator` (`IPlayerCalibrator`): `Complete(profile)`, `Fail(reason)`, `HoldProgress` setter; `BeginCount`. `Begin` and `Cancel` raise `StepChanged` when the step changes. `Complete` and `Fail` throw `InvalidOperationException` unless a calibration is in progress (`Step` is not `Idle`, `Done` or `Failed`).
   - `FakeHandCursor` (`IHandCursor`): `Set(active, position)`.
   - `FakeCameraPreview` (`ICameraPreview`): `Set(Texture)`.
   - `FakeTrackingDiagnostics` (`ITrackingDiagnostics`): `Set(TrackingStats)`, `SetCameras(...)`.
