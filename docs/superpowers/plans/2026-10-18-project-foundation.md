@@ -673,3 +673,21 @@ unity/MotionBowling/                                 Task 2  (created by Unity)
 ## Execution notes
 
 (Filled in by the executor: the Unity version used, the resolved package versions (Task 3), the serialized PlayerSettings keys (Task 2), the `verify.sh` duration, and any deviation from this plan with its reason.)
+
+### Task 3: Package set
+
+Unity 6000.3.26f1. Resolved by `PackageInstaller.InstallBatch` (`AddAndRemove` with bare package names, so Unity picked the version it verifies for this editor). Exact versions now in `Packages/manifest.json`:
+
+| Package | Version |
+|---|---|
+| `com.unity.render-pipelines.universal` | 17.3.0 |
+| `com.unity.inputsystem` | 1.20.1 |
+| `com.unity.cinemachine` | 3.1.7 |
+| `com.unity.test-framework` | 1.6.0 |
+| `com.unity.test-framework.performance` | 3.6.0 |
+| `com.unity.nuget.newtonsoft-json` | 3.2.2 |
+
+- Removed: `com.unity.multiplayer.center` (the only `Removed` package the fresh manifest had). `com.unity.ugui` stays in `packages-lock.json` as a transitive dependency, not in `manifest.json`. The 34 `com.unity.modules.*` entries are unchanged.
+- Deviation, order: the fresh manifest had no `com.unity.test-framework`, so the installer ran before the tests (the brief's Step 1 branch).
+- Deviation, `PackageManifestRules` takes the manifest's parsed `dependencies` (a dictionary), not JSON text. The spec gives `Bowling.Tooling.Editor` no precompiled references, and `Newtonsoft.Json.dll` doesn't exist before the install, so the tests (which have Newtonsoft) parse the JSON.
+- Side effect, not committed: installing URP made Unity create `Assets/UniversalRenderPipelineGlobalSettings.asset` and `Assets/DefaultVolumeProfile.asset`, edit `ProjectSettings/GraphicsSettings.asset` and `InputManager.asset`, and add `ProjectSettings/ShaderGraphSettings.asset`. The graphics baseline task decides where these live (spec 3.4: `Assets/_Project/Settings/`).
