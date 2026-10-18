@@ -5,6 +5,10 @@ name: verify
 
 on: [push, pull_request]
 
+# The job only reads the repository. This also limits what the token can do if a workflow run is abused.
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: [self-hosted, macOS, ARM64]

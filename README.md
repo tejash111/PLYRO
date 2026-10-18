@@ -2,7 +2,7 @@
 
 A walk-up 3D bowling game for macOS. Stand in front of the screen, swing your arm like a real bowler, and the ball rolls down the lane. Body tracking uses MediaPipe Pose through a native macOS plugin. The game is built in Unity 6.
 
-Status: **design approved; planning.** The specs in `docs/superpowers/specs/` are approved, and implementation plans go in `docs/superpowers/plans/`. There is no code yet.
+Status: **project foundation implemented, on branch `worktree-foundation`.** The specs in `docs/superpowers/specs/` are approved, and implementation plans go in `docs/superpowers/plans/`. The foundation (spec 1) is built there: the Unity project, the module skeleton, Contracts, the test fakes, the source-of-truth validators, and `tools/ci/verify.sh`. The other sub-projects (specs 2 to 9) are not started.
 
 ## Where to start
 
@@ -19,7 +19,7 @@ This is the single check for local runs and for CI. It stops at the first failur
 
 1. Source-of-truth text checks (`tools/checks/check_sources_of_truth.sh --all`).
 2. The shell test suites: `tools/checks/test_checks.sh`, `tools/ci/test_ci_scripts.sh`, `tools/dev/test_check_env.sh` and `tools/ci/test_verify.sh`.
-3. The editor validators in Unity batch mode, and no `warning CS` from `Assets/_Project` in the editor log.
+3. The editor validators in Unity batch mode, and no `warning CS` from `Assets/_Project` in the editor log. This step first deletes `Library/ScriptAssemblies` and `Library/Bee`, so every run recompiles the scripts and the log shows their warnings.
 4. Unity EditMode tests.
 5. Unity PlayMode tests.
 6. Every path in `tools/checks/required-files.txt` exists.

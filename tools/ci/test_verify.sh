@@ -24,11 +24,16 @@ trap 'rm -rf "$WORK"' EXIT
 #   STUB_FAIL       "<script> <arguments>" of the call that must fail (with STUB_FAIL_CODE, default 7)
 #   STUB_LOG        what the stub unity.sh writes to <project>/Logs/ci/$UNITY_LOG_NAME.log
 #   STUB_NO_LOG     if set, the stub unity.sh writes no log
+# The stub unity.sh also writes the entries of <project>/Library, as they are when Unity would start, to
+# "$STUB_CALLS.library" (one name per line).
 cat > "$WORK/stub.sh" <<'EOF'
 #!/usr/bin/env bash
 name="$(basename "$0")"
 call="$name${*:+ $*}"
 echo "$call" >> "$STUB_CALLS"
+if [ "$name" = unity.sh ]; then
+  ls "$(cd "$(dirname "$0")/../.." && pwd)/unity/MotionBowling/Library" > "$STUB_CALLS.library" 2>&1 || true
+fi
 if [ "${STUB_FAIL:-}" = "$call" ]; then
   exit "${STUB_FAIL_CODE:-7}"
 fi
@@ -60,6 +65,7 @@ run_verify() {
   local t="$1"
   shift
   : > "$t/calls.log"
+  rm -f "$t/calls.log.library"
   (cd / && env STUB_CALLS="$t/calls.log" "$@" bash "$t/tools/ci/verify.sh")
 }
 
@@ -89,6 +95,24 @@ calls_lack() {
   shift
   calls="$(calls_of "$@")"
   [[ "$calls" != *"$needle"* ]]
+}
+
+# library_seen_by_unity <tree> [VAR=value...]: the entries of <project>/Library that were there when the
+# stub unity.sh ran during a run, one per line (empty if it didn't run).
+library_seen_by_unity() {
+  local t="$1"
+  output_of "$@" > /dev/null
+  if [ -f "$t/calls.log.library" ]; then cat "$t/calls.log.library"; fi
+}
+
+# make_library <tree>: a Library/ with the two folders step 3 must delete and three that it must keep.
+make_library() {
+  local lib="$1/unity/MotionBowling/Library" d
+  for d in ScriptAssemblies/sub Bee/artifacts Artifacts PackageCache ShaderCache; do
+    mkdir -p "$lib/$d"
+    : > "$lib/$d/file with space"
+  done
+  : > "$lib/ScriptAssemblies/Bowling.Contracts.dll"
 }
 
 # headings_of <tree> [VAR=value...]: the "== step N: ..." lines of a run.
@@ -199,6 +223,44 @@ stale_then_clean() {
   run_verify "$T"
 }
 assert_exit 0 stale_then_clean
+
+# --- Step 3: a full script recompile is forced (R24) --------------------------------------------
+# Unity logs compiler output only for assemblies it recompiles, so a warning compiled into a warm Library/
+# would never reach the log. Step 3 deletes Library/ScriptAssemblies and Library/Bee, and nothing else of
+# Library/, before it starts Unity.
+T="$(make_tree recompile)"
+# lib_has <tree> <entry of Library/>: exit 0 if it exists.
+lib_has() {
+  [ -e "$1/unity/MotionBowling/Library/$2" ]
+}
+# They are gone before Unity starts, not after it: the Library/ the stub unity.sh found has only the
+# folders that are kept (and nothing of them was lost: they are still there after the run).
+unity_finds_only_kept() {
+  local seen
+  make_library "$1"
+  seen="$(library_seen_by_unity "$1")"
+  [ "$seen" = "Artifacts
+PackageCache
+ShaderCache" ]
+}
+assert_exit 0 unity_finds_only_kept "$T"
+make_library "$T"
+run_verify "$T" > /dev/null 2>&1
+assert_exit 1 lib_has "$T" ScriptAssemblies
+assert_exit 1 lib_has "$T" Bee
+assert_exit 0 lib_has "$T" "Artifacts/file with space"
+assert_exit 0 lib_has "$T" "PackageCache/file with space"
+assert_exit 0 lib_has "$T" "ShaderCache/file with space"
+# Nothing is deleted before step 3: a failure in step 1 leaves Library/ alone.
+survives_early_failure() {
+  make_library "$1"
+  run_verify "$1" STUB_FAIL="$STEP1" > /dev/null 2>&1 || true
+  lib_has "$1" ScriptAssemblies/sub && lib_has "$1" Bee/artifacts
+}
+assert_exit 0 survives_early_failure "$T"
+# A project without a Library/ (a fresh checkout) is fine.
+T="$(make_tree nolibrary)"
+assert_exit 0 run_verify "$T"
 
 # --- Step 6: required files ----------------------------------------------------------------------
 T="$(make_tree files)"

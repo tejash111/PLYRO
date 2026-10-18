@@ -6,8 +6,10 @@
 # Runs these steps in order and stops at the first failure:
 #   1. check_sources_of_truth.sh --all       text checks for SOT-1 and SOT-2
 #   2. the shell suites                      test_checks.sh, test_ci_scripts.sh, test_check_env.sh, test_verify.sh
-#   3. Unity batch mode                      SourceOfTruthValidator.RunBatch (the editor validators), then the
-#                                            editor log must have no "warning CS" line from Assets/_Project
+#   3. Unity batch mode                      first deletes Library/ScriptAssemblies and Library/Bee to force a full
+#                                            script recompile, then SourceOfTruthValidator.RunBatch (the editor
+#                                            validators), then the editor log must have no "warning CS" line from
+#                                            Assets/_Project
 #   4. Unity EditMode tests
 #   5. Unity PlayMode tests
 #   6. required files                        every entry of tools/checks/required-files.txt exists
@@ -110,10 +112,16 @@ step_shell_suites() {
 }
 
 step_validate() {
-  local log
-  log="$(unity_project_dir)/Logs/ci/validate.log"
+  local project log
+  project="$(unity_project_dir)"
+  log="$project/Logs/ci/validate.log"
   # A log left by an earlier run must not be judged in place of this run's log.
   rm -f "$log"
+  # Unity logs compiler output only for the assemblies it recompiles, so a warning already compiled into a
+  # warm Library/ would never reach the log and the check below would pass without seeing it. Deleting the
+  # compiled scripts (ScriptAssemblies) and the build graph that produced them (Bee) forces a full script
+  # recompile in this run. Nothing else of Library/ is touched, so the asset import stays cached.
+  rm -rf "$project/Library/ScriptAssemblies" "$project/Library/Bee"
   UNITY_LOG_NAME=validate bash "$REPO_ROOT/tools/ci/unity.sh" exec Bowling.Tooling.Editor.SourceOfTruthValidator.RunBatch || {
     local rc=$?
     printf 'Unity log: %s\n' "$log" >&2
