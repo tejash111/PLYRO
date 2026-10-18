@@ -29,7 +29,7 @@ Create the Unity project and module skeleton so that every later sub-project can
 
 **Location:** `unity/MotionBowling/`.
 
-**Editor version:** the latest Unity 6 LTS patch on the day the plan runs. It is pinned in `ProjectSettings/ProjectVersion.txt` and recorded in the plan.
+**Editor version:** Unity 6.3 LTS. Use the latest `6000.3` patch on the day the plan runs (on 2026-10-18 that is `6000.3.26f1`). It is pinned in `tools/ci/unity-version.txt` and `ProjectSettings/ProjectVersion.txt`, and the two must match.
 
 **Packages** (exact versions are pinned in `Packages/manifest.json` and recorded in the plan):
 
@@ -44,6 +44,8 @@ Create the Unity project and module skeleton so that every later sub-project can
 
 FMOD for Unity is added by the presentation sub-project, not here.
 
+Default packages that aren't in this table are removed (for example Visual Scripting, Collab, Timeline, uGUI and Multiplayer Center). The IDE integration packages (`com.unity.ide.rider`, `com.unity.ide.visualstudio`) and the built-in `com.unity.modules.*` packages stay.
+
 ### 3.1 Player settings
 
 | Setting | Value |
@@ -53,7 +55,7 @@ FMOD for Unity is added by the presentation sub-project, not here.
 | Bundle identifier | `ai.shavastudios.motionbowling` |
 | Scripting backend | IL2CPP |
 | API compatibility | .NET Standard 2.1 |
-| Architecture | Apple Silicon |
+| Architecture | Apple Silicon. This is a per-user build setting that isn't stored in `ProjectSettings`, so the platform build script enforces it at build time. |
 | Graphics API | Metal only |
 | Camera usage description | "Motion Bowling uses the camera to see your bowling swing. Video stays on this Mac and is never saved." |
 | Run in background | On |
@@ -84,10 +86,16 @@ FMOD for Unity is added by the presentation sub-project, not here.
   - Fog off.
   - Environment reflections source = Custom with no cubemap. Reflection probes come later in presentation.
 - **Camera:** the default camera prefab clears to a solid color, `Palette.Background` from the presentation spec. Until presentation exists, use `#14161F`.
+- **Where the settings assets live:** the URP asset, its renderer, the URP global settings, Unity 6's default volume profile and `GlobalVolumeProfile.asset` all live in `Assets/_Project/Settings/`.
 
 ### 3.5 Scenes
 
-There is one scene, `Assets/_Project/Scenes/Main.unity`, containing only the `Bootstrap` root object, which carries `GameBootstrap` from App. Later sub-projects add prefab instances, never loose objects (SOT-2).
+There is one scene, `Assets/_Project/Scenes/Main.unity`, and it is the only scene in the build settings. It has two root objects:
+
+- `Bootstrap`, which carries `GameBootstrap` from App.
+- An instance of `Assets/_Project/Prefabs/Rendering/Rendering.prefab`, which holds the Main Camera and the Global Volume.
+
+Later sub-projects add prefab instances, never loose objects (SOT-2).
 
 ## 4. Module skeleton
 
@@ -115,7 +123,7 @@ Assets/_Project/Modules/<Module>/
 | Platform | ✓ | | ✓ | |
 | App | ✓ | ✓ (build script, platform spec) | ✓ (integration) | ✓ (integration) |
 | Tooling | | ✓ | ✓ | |
-| Testing | ✓ (test-only) | | | |
+| Testing | ✓ (test-only) | | ✓ (fake semantics) | |
 
 **Asmdef rules.** Every asmdef sets `autoReferenced: false`. The rest depends on its kind (M-1 checks this table):
 
@@ -127,7 +135,8 @@ Assets/_Project/Modules/<Module>/
 | PlayMode tests | `Bowling.<Module>.Tests.PlayMode` | `Bowling.<Module>.Tests` | `[]` | Same as EditMode tests |
 | Testing (fakes) | `Bowling.Testing` | `Bowling.Testing` | `[]` | `defineConstraints: ["UNITY_INCLUDE_TESTS"]` (never ships); references `Bowling.Contracts` only |
 
-- **Test asmdef references:** their module, `Bowling.Contracts`, `Bowling.Testing`, `UnityEngine.TestRunner` and `UnityEditor.TestRunner`.
+- **Precompiled DLLs:** every asmdef sets `overrideReferences: true` and lists its precompiled DLLs explicitly. Otherwise auto-referenced DLLs such as `Newtonsoft.Json.dll` would reach every module.
+- **Test asmdef references:** their module, `Bowling.Contracts`, `Bowling.Testing`, `UnityEngine.TestRunner` and `UnityEditor.TestRunner`. They may also reference `Unity.PerformanceTesting`, the precompiled `Newtonsoft.Json.dll` (for JSON fixtures), and anything their own module may reference.
 - **`Bowling.App`** references every runtime module.
 - **Unsafe code:** only `Bowling.PoseInput` sets `allowUnsafeCode: true`, for the zero-allocation interop in pose-input spec section 7. Any other module that needs it requires a spec change first.
 
@@ -136,17 +145,17 @@ Assets/_Project/Modules/<Module>/
 | Assembly | May additionally reference |
 |---|---|
 | `Bowling.Contracts` | nothing |
-| `Bowling.PoseInput` | `Unity.Nuget.Newtonsoft-Json` |
+| `Bowling.PoseInput` | `Newtonsoft.Json.dll` (precompiled) |
 | `Bowling.ThrowDetection` | nothing |
 | `Bowling.BowlingPhysics` | nothing |
 | `Bowling.Gameplay` | nothing |
 | `Bowling.Presentation` | `Unity.Cinemachine`, `FMODUnity`, `Unity.RenderPipelines.Universal.Runtime`, `Unity.RenderPipelines.Core.Runtime` |
 | `Bowling.UI` | nothing (UI Toolkit is part of UnityEngine) |
-| `Bowling.Platform` | `Unity.Nuget.Newtonsoft-Json`, `Unity.InputSystem` |
+| `Bowling.Platform` | `Newtonsoft.Json.dll` (precompiled), `Unity.InputSystem` |
 | `Bowling.App` | every `Bowling.*` runtime assembly, `Unity.InputSystem` |
 | `Bowling.App.Editor` | every `Bowling.*` runtime assembly (build script only) |
 | `Bowling.App.Tests.*` | every `Bowling.*` runtime assembly, plus `Bowling.Testing`. This is the **only** place for integration tests that combine modules. |
-| `Bowling.Tooling.Editor` | `Unity.RenderPipelines.Universal.Runtime`, `Unity.RenderPipelines.Core.Runtime`, `Unity.Nuget.Newtonsoft-Json` |
+| `Bowling.Tooling.Editor` | `Unity.RenderPipelines.Universal.Runtime`, `Unity.RenderPipelines.Core.Runtime`, `Newtonsoft.Json.dll` (precompiled) |
 
 ### 4.1 Module README template
 
@@ -168,6 +177,8 @@ Runtime/
 ├─ Core/         plain C# logic (no MonoBehaviour), one type per file; may have area subfolders (e.g. Core/Recording/)
 └─ Config/       ScriptableObject type definitions (the assets themselves live in Assets/_Project/Config/<Module>/)
 ```
+
+The Tooling module has no `Runtime/`. Its `Editor/` holds `Setup/` (package installer and project-settings baseline), `Validation/` (validators and rules) and `Config/`.
 
 The UI module replaces `Components/` with UI-component folders, and adds `Styles/`, `Screens/<Name>Screen/` (and `Screens/<Name>Overlay/` for overlays) and `Root/` (which holds its single MonoBehaviour, `UiRoot`). See the UI spec. Those are the only extra top-level folders allowed.
 
@@ -264,12 +275,12 @@ Two layers share one rule set:
 | ID | Layer | Detects |
 |---|---|---|
 | G-1 | text | In `.uss`/`.uxml`: `linear-gradient(`, `radial-gradient(`, `conic-gradient(`, and `text-shadow` with a non-zero blur radius |
-| G-2 | text | In `.cs`: `new Gradient(`, `GradientColorKey`, `GradientAlphaKey`, `colorGradient`, `enableVertexGradient`, `VertexGradient`, `TMP_ColorGradient`, `AmbientMode.Trilight`, `AmbientMode.Skybox`, `ambientSkyColor`, `ambientEquatorColor`, `ambientGroundColor`, `RenderSettings.fog = true`, `Vignette`, `ScreenSpaceLensFlare` |
+| G-2 | text | In `.cs`, ignoring lines whose first non-space characters are `//`: `new Gradient(`, `GradientColorKey`, `GradientAlphaKey`, `colorGradient`, `enableVertexGradient`, `VertexGradient`, `TMP_ColorGradient`, `AmbientMode.Trilight`, `AmbientMode.Skybox`, `ambientSkyColor`, `ambientEquatorColor`, `ambientGroundColor`, `RenderSettings.fog = true`, `Vignette`, `ScreenSpaceLensFlare` |
 | G-3 | text | In `.shadergraph`/`.shadersubgraph`: node types `UnityEditor.ShaderGraph.GradientNode`, `UnityEditor.ShaderGraph.SampleGradient`, `UnityEditor.ShaderGraph.BlackbodyNode` |
 | G-3b | text | Any `.shader`/`.hlsl`/`.shadergraph` under `_Project` that isn't listed in `tools/checks/reviewed-shaders.txt` (format: `<path> # reviewed by <name> on <date>: <why gradient-free>`) |
-| G-4 | editor | Every `VolumeProfile` asset: any active `Vignette`, `ScreenSpaceLensFlare` or `FilmGrain`; an active `Bloom` with intensity > 0 (Q-3 default) |
+| G-4 | editor | Every `VolumeProfile` asset under `Assets/` (vendor folders excluded): an active `Vignette`, `ScreenSpaceLensFlare`, `FilmGrain` or `Bloom` (Q-3 default) whose intensity is above 0. Unity 6's default profile carries every override at zero intensity, so zero-intensity overrides pass. |
 | G-5 | editor | Every scene in the build plus every prefab under `_Project`: `RenderSettings.ambientMode` not `Flat`; fog on; skybox not null; any `Camera.clearFlags == Skybox`; any `LineRenderer`/`TrailRenderer` whose `colorGradient` has more than one color key or more than one alpha key |
-| G-6 | editor | Every color `Texture2D`/`Sprite` under `_Project/Art/**` and `_Project/Modules/UI/**`. Skipped: normal maps, non-sRGB data textures, lightmaps. Fails when more than 2% of opaque pixels differ from a 4-neighbour by a small non-zero step (0 < Δ ≤ 3/255 on any channel), which is the signature of a smooth ramp. Thresholds live in `Tooling/Editor/Config/GradientHeuristic.asset`. |
+| G-6 | editor | Every color `Texture2D`/`Sprite` under `_Project/Art/**` and `_Project/Modules/UI/**`. Skipped: normal maps, non-sRGB data textures, lightmaps. Fails when more than 2% of opaque pixels differ from a 4-neighbour by a small non-zero step (0 < Δ ≤ 3/255 on any channel), which is the signature of a smooth ramp. Thresholds live in `Tooling/Editor/Config/GradientHeuristic.asset`. The check reads the source PNG bytes, so any other color-texture format in the scanned folders fails G-6 with "convert to PNG". |
 
 ### 8.2 SOT-2 rules (modular structure)
 
@@ -303,6 +314,18 @@ Two layers share one rule set:
 5. Unity PlayMode tests
 6. `required-files` check: every path in `tools/checks/required-files.txt` exists (the file starts empty; later sub-projects append entries)
 
+**How Unity steps are judged:**
+
+- Unity documents no process exit codes for test runs. So test steps pass only when the NUnit XML results file exists, its `total` is above 0 and its `failed` is 0.
+- Step 3 also fails on any `warning CS` from `Assets/_Project` in the editor log, which covers acceptance criterion 1.
+
+**Helper scripts:**
+
+- `tools/ci/unity.sh` resolves the editor and runs it.
+- `tools/ci/run_unity_tests.sh` runs one test platform.
+- `tools/ci/check_test_results.sh` judges a results file.
+- `tools/dev/check-env.sh` checks the developer machine, with install steps in `docs/dev-setup.md`.
+
 The Unity editor path comes from the `UNITY_EDITOR` environment variable. If that's unset, it's derived from `ProjectVersion.txt` plus the Unity Hub default install path.
 
 **CI provider (Claude's call; change if you use something else):** a GitHub Actions workflow `.github/workflows/verify.yml` on a self-hosted Apple Silicon runner. It calls `tools/ci/verify.sh`. The Unity license is activated on the runner once, out of band.
@@ -326,7 +349,25 @@ The Unity editor path comes from the `UNITY_EDITOR` environment variable. If tha
 6. **Manual check:** staging a `.uss` containing `linear-gradient(` is rejected by the pre-commit hook with a `G-1` line.
 7. **Manual check:** adding a `Bowling.Gameplay → Bowling.BowlingPhysics` reference fails M-2.
 
-## 12. Decisions made here (Claude's calls, please check)
+## 12. Plan-time refinements (2026-10-18, pending your approval with the plan)
+
+Writing the implementation plan surfaced the changes now reflected above:
+
+- The Unity 6.3 LTS version pin.
+- Removing unused default packages.
+- Architecture as a build-time setting.
+- Where the settings assets live.
+- The `Rendering` prefab as a second scene root.
+- Tests for the Testing fakes.
+- Explicit precompiled references (Newtonsoft.Json is a precompiled DLL, not an asmdef).
+- The Tooling folder layout.
+- G-2 ignores comment lines.
+- G-4 judges intensity and scans all of `Assets/`.
+- G-6 reads PNG only.
+- Unity results judged from XML.
+- The helper scripts.
+
+## 13. Decisions made here (Claude's calls, please check)
 
 - No DI framework. Wiring is done by hand in `GameBootstrap` (system design D-5).
 - Domain reload is off in the editor.
