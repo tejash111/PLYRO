@@ -4,6 +4,7 @@ using System.Linq;
 using Bowling.Tooling.Editor;
 using NUnit.Framework;
 using UnityEditor;
+using UnityEngine;
 
 namespace Bowling.Tooling.Tests
 {
@@ -23,6 +24,17 @@ namespace Bowling.Tooling.Tests
         public void TearDown() => TempAssets.DeleteAll();
 
         List<Violation> Run() => new TextureGradientRule().Run(TempAssets.Context(_folder)).ToList();
+
+        // A 256x4 ramp as an in-memory texture, for tests that save it as a native asset.
+        static Texture2D NativeTexture()
+        {
+            var texture = new Texture2D(256, 4, TextureFormat.RGBA32, false);
+            var pixels = new Color32[256 * 4];
+            for (int i = 0; i < pixels.Length; i++) pixels[i] = TextureFixtures.Ramp(i % 256, i / 256);
+            texture.SetPixels32(pixels);
+            texture.Apply();
+            return texture;
+        }
 
         static void AssertOneViolation(List<Violation> violations, string path, string messagePart)
         {
@@ -79,6 +91,34 @@ namespace Bowling.Tooling.Tests
         }
 
         [Test]
+        public void ATexture2DSavedAsANativeAssetFailsWithConvertToPng()
+        {
+            // A native .asset gets a NativeFormatImporter, not a TextureImporter: the easiest way around the gate.
+            string path = $"{_folder}/Glow.asset";
+            AssetDatabase.CreateAsset(NativeTexture(), path);
+
+            AssertOneViolation(Run(), path, "convert to PNG");
+        }
+
+        [Test]
+        public void ACubemapSavedAsANativeAssetFailsWithConvertToPng()
+        {
+            string path = $"{_folder}/Sky.asset";
+            AssetDatabase.CreateAsset(new Cubemap(4, TextureFormat.RGBA32, false), path);
+
+            AssertOneViolation(Run(), path, "convert to PNG");
+        }
+
+        [Test]
+        public void ATexture2DArraySavedAsANativeAssetFailsWithConvertToPng()
+        {
+            string path = $"{_folder}/Layers.asset";
+            AssetDatabase.CreateAsset(new Texture2DArray(4, 4, 2, TextureFormat.RGBA32, false), path);
+
+            AssertOneViolation(Run(), path, "convert to PNG");
+        }
+
+        [Test]
         public void ATextureThatCannotBeDecodedFails()
         {
             // Unity does not list a PNG it can't import at all. This one imported fine, then its file was damaged:
@@ -124,6 +164,24 @@ namespace Bowling.Tooling.Tests
         {
             TextureFixtures.Png(_folder, "Fade", 256, 4, (x, y) => TextureFixtures.Gray(x, 128));
 
+            Assert.That(Run(), Is.Empty);
+        }
+
+        [Test]
+        public void ATextureEmbeddedInAnotherAssetIsNotJudged()
+        {
+            // The way an FBX carries its textures: a sub-asset of a main asset that is not a texture. The
+            // AssetDatabase lists the file for t:Texture, but only a texture main asset is a texture file.
+            string path = $"{_folder}/Holder.mat";
+            var material = new Material(Shader.Find("Hidden/InternalErrorShader"));
+            AssetDatabase.CreateAsset(material, path);
+            Texture2D embedded = NativeTexture();
+            embedded.name = "Embedded";
+            AssetDatabase.AddObjectToAsset(embedded, material);
+            AssetDatabase.SaveAssets();
+
+            Assert.That(AssetDatabase.FindAssets("t:Texture", new[] { _folder }), Is.Not.Empty, "the search no longer lists the host asset");
+            Assert.That(AssetDatabase.GetMainAssetTypeAtPath(path), Is.EqualTo(typeof(Material)));
             Assert.That(Run(), Is.Empty);
         }
 
