@@ -18,6 +18,7 @@
 # Git LFS: native plugin bundles and recorded pose data
 unity/MotionBowling/Assets/Plugins/macOS/*.bundle/** filter=lfs diff=lfs merge=lfs -text
 test-data/** filter=lfs diff=lfs merge=lfs -text
+test-data/**/.gitkeep -filter -diff -merge text
 
 # Unity YAML merge (driver registered per clone, see docs/dev-setup.md)
 *.unity merge=unityyamlmerge

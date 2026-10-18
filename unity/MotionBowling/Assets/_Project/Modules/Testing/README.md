@@ -6,14 +6,32 @@ Test-only fakes for every Contracts interface, so each module can be built and t
 
 ## Public API
 
-The module is a skeleton for now: the fakes arrive with the Testing task of sub-project 1 (foundation spec section 6). No MonoBehaviours. It will hold:
+No MonoBehaviours. Every type is a public class in the namespace `Bowling.Testing`, one per file. The fakes implement the Contracts interfaces below, and the order in which each one sets state and raises events is pinned by `Tests/EditMode/`.
 
-- `FakeClock` (`IClock`).
-- `FakeTrackingSource`, `FakePlayerInput`, `FakeCalibrator`, `FakeHandCursor`, `FakeCameraPreview`, `FakeTrackingDiagnostics` and `FakeRecordingIndicator` (the input interfaces).
-- `FakeThrowSource` (`IThrowSource`) and `FakeRollSimulator` (`IRollSimulator`).
-- `FakeGameEvents` and `FakeGameCommands` (`IGameEvents`, `IGameCommands`), and `FakeUiCues` (`IUiCues`).
-- `RecordingGameLog` (`IGameLog`), `InMemoryLeaderboardStore`, `InMemorySettingsStore` and `FakeOperatorActions`.
-- `TestDataPaths`, which resolves `test-data/pose-recordings/` from the Unity project path.
+- `FakeClock` (`IClock`): `Now` starts at 0; `Advance(seconds)` moves it forward and throws `ArgumentOutOfRangeException` for a negative or NaN amount.
+- Input:
+  - `FakeTrackingSource` (`ITrackingSource`): `Push(PoseSample)`, `SetStatus`; `Start`/`Stop` set `Running`/`Stopped` and are counted in `StartCount`/`StopCount`. Starts `Stopped`.
+  - `FakePlayerInput` (`IPlayerInput`): `SetPresent`, `SetStatus` (events only when the value changes), `PushPose(PlayerPose)`. Starts `Stopped`, absent, with no pose.
+  - `FakeCalibrator` (`IPlayerCalibrator`): `Complete(profile)`, `Fail(reason)`, `HoldProgress` setter; `BeginCount`.
+  - `FakeHandCursor` (`IHandCursor`): `Set(active, position)`.
+  - `FakeCameraPreview` (`ICameraPreview`): `Set(Texture)`.
+  - `FakeTrackingDiagnostics` (`ITrackingDiagnostics`): `Set(TrackingStats)`, `SetCameras(...)`.
+  - `FakeRecordingIndicator` (`IRecordingIndicator`): `Set(bool)`.
+- Throw and roll:
+  - `FakeThrowSource` (`IThrowSource`): `SetPhase`, `EmitThrow(ThrowEvent)`, `Reject(reason)`; records `LastContext`, `ArmCount` and `DisarmCount`. Only `SetPhase` raises `PhaseChanged`.
+  - `FakeRollSimulator` (`IRollSimulator`): `CompleteWith(standingAfter, gutter, reason)`, `RaiseMilestone`, `RaiseImpact`; records `LastRack`, `LastBumpers` and `LastThrow` with call counts. `SetRack` also sets `Standing`.
+- Game:
+  - `FakeGameEvents` (`IGameEvents`): `SetState`, `Publish(GameSnapshot)`, `RaiseRollScored`. `Current` starts as an Attract snapshot with no players.
+  - `FakeGameCommands` (`IGameCommands`): `Calls` (text, in order) and `SelectModeCalls` (typed).
+  - `FakeUiCues` (`IUiCues`): `Raise(UiCue)`.
+- Platform:
+  - `RecordingGameLog` (`IGameLog`): `Entries` as `GameLogEntry` (`GameLogLevel`, category, message, exception).
+  - `InMemoryLeaderboardStore` (`ILeaderboardStore`): built with a `Func<DateTime>` for UTC now and a `TimeZoneInfo`; "Today" compares local dates in that zone.
+  - `InMemorySettingsStore` (`ISettingsStore`): saves and loads copies.
+  - `FakeOperatorActions` (`IOperatorActions`): `Calls`; `ApplySettings` raises `SettingsApplied`.
+- `TestDataPaths.PoseRecordings`: the absolute `<repo>/test-data/pose-recordings` folder, computed from `Application.dataPath`.
+
+`GameLogLevel` and `GameLogEntry` are the only types here that implement no interface: they describe what `RecordingGameLog` records.
 
 ## Dependencies
 
@@ -23,5 +41,6 @@ The module is a skeleton for now: the fakes arrive with the Testing task of sub-
 
 ## Folder map
 
-- `Runtime/`: the test-only assembly `Bowling.Testing`. For now it holds only `AssemblyInfo.cs` (`InternalsVisibleTo` for the test assemblies); the fakes arrive with the implementation.
-- `Tests/EditMode/`: EditMode tests for the fakes (`Bowling.Testing.Tests.EditMode`).
+- `Runtime/`: the test-only assembly `Bowling.Testing`, with `AssemblyInfo.cs` (`InternalsVisibleTo` for the test assemblies).
+- `Runtime/Core/`: the fakes, one public type per file.
+- `Tests/EditMode/`: EditMode tests for the fakes (`Bowling.Testing.Tests.EditMode`), one file per area.
