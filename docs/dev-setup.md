@@ -52,9 +52,11 @@ The game is built with Unity 6.3 LTS, with the **Mac Build Support (IL2CPP)** mo
    "/Applications/Unity Hub.app/Contents/MacOS/Unity Hub" -- --headless install --version <ver> --module mac-il2cpp
    ```
 
-Leave Unity Hub's install location at its default, `/Applications/Unity/Hub/Editor`. The editor ends up at `/Applications/Unity/Hub/Editor/<ver>/Unity.app`.
+Leave Unity Hub's install location at its default, `/Applications/Unity/Hub/Editor`. On Apple Silicon, Hub installs the editor into `/Applications/Unity/Hub/Editor/<ver>-arm64/Unity.app`, and sometimes into `/Applications/Unity/Hub/Editor/<ver>/Unity.app`. Both `tools/dev/check-env.sh` and `tools/ci/unity.sh` try `<ver>-arm64` first, then `<ver>`. A folder counts only if it has `Unity.app/Contents/Info.plist` and an executable `Unity.app/Contents/MacOS/Unity`.
 
-If you must install elsewhere, point the tools at it: `UNITY_HUB_EDITORS_DIR` for `tools/dev/check-env.sh`, and `UNITY_EDITOR` (the full path of the editor binary) for the CI scripts.
+If you must install elsewhere, point the tools at it: `UNITY_HUB_EDITORS_DIR` (the folder that holds the `<ver>` folders) for both, or `UNITY_EDITOR` (the full path of the editor binary) for the CI scripts.
+
+**Broken install.** If `check-env.sh` prints `MISSING Unity <ver> — incomplete install at <path>`, or `unity.sh` fails with `install at <path> is incomplete`, that folder is only half installed. Typically `Unity.app/Contents/Info.plist` is missing and `Contents/Frameworks` is empty. macOS kills such an editor the moment it starts: exit 137, `Killed: 9`, and an empty log. `codesign --verify --strict "<path>/Unity.app"` reports an invalid signature. To repair it, uninstall the editor in Unity Hub (Installs tab) and install it again, or delete the folder and install again. A complete `<ver>-arm64` next to a broken `<ver>` is used automatically, but remove the broken folder anyway so it doesn't confuse Hub.
 
 ## UnityYAMLMerge
 
@@ -66,7 +68,7 @@ git config merge.unityyamlmerge.driver "'/Applications/Unity/Hub/Editor/<ver>/Un
 git config merge.unityyamlmerge.recursive binary
 ```
 
-The driver path contains the editor version, so run these again after the pinned version changes.
+The driver path contains the editor version, so run these again after the pinned version changes. If your editor is in the `<ver>-arm64` folder, use that folder name in the path. `tools/ci/unity.sh path` shows which one the tools use.
 
 ## Pre-commit hook
 
@@ -83,13 +85,13 @@ bash tools/checks/install-hooks.sh
 | Variable | Meaning |
 |---|---|
 | `UNITY_EDITOR` | Full path of the editor binary. Wins over the lookup below, and must be an executable file. |
-| `UNITY_HUB_EDITORS_DIR` | Where Unity Hub installs editors. Default `/Applications/Unity/Hub/Editor`. The editor is `<dir>/<ver>/Unity.app/Contents/MacOS/Unity`. |
+| `UNITY_HUB_EDITORS_DIR` | Where Unity Hub installs editors. Default `/Applications/Unity/Hub/Editor`. The editor is `<dir>/<ver>-arm64/Unity.app/Contents/MacOS/Unity`, or else `<dir>/<ver>/Unity.app/Contents/MacOS/Unity`. See "Unity Hub and editor" for what makes a folder valid. |
 | `UNITY_PROJECT_DIR` | Absolute path of the Unity project. Default: `unity/MotionBowling` in this repo. |
 | `UNITY_LOG_NAME` | Name of the editor log, written to `<project>/Logs/ci/<name>.log` (gitignored). Default `run` for `unity.sh`, and the platform name (`EditMode` or `PlayMode`) for `run_unity_tests.sh`. |
 
 `<ver>` is the version in `ProjectSettings/ProjectVersion.txt` once the project exists, else `tools/ci/unity-version.txt`. If the two differ, the scripts exit 2 with an error. Run `tools/ci/unity.sh path` to see which editor would run.
 
-If the editor is killed at once (exit 137, `Killed: 9`, empty log), the install is damaged: macOS kills a binary whose code signature doesn't verify. Check with `codesign --verify --strict <editor>/Unity.app` and reinstall the editor from Unity Hub. Unity Hub on Apple Silicon can also install into `<ver>-arm64` instead of `<ver>`. In that case point `UNITY_EDITOR` at `.../<ver>-arm64/Unity.app/Contents/MacOS/Unity`.
+If an editor is killed at once (exit 137, `Killed: 9`, empty log), its install is damaged. See "Broken install" under "Unity Hub and editor".
 
 ## Serialized PlayerSettings keys
 

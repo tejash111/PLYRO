@@ -29,12 +29,22 @@ in_dir() {
   (cd "$dir" && "$@")
 }
 
-# make_editor <hub dir> <version>: an executable that stands in for the editor binary.
+# make_editor <hub dir> <install dir name>: a complete fake install, like Unity Hub makes it:
+# <hub dir>/<name>/Unity.app/Contents/Info.plist and an executable MacOS/Unity.
+# <name> is the version, or <version>-arm64.
 make_editor() {
-  local bin="$1/$2/Unity.app/Contents/MacOS/Unity"
-  mkdir -p "$(dirname "$bin")"
-  printf '#!/bin/sh\nexit 0\n' > "$bin"
-  chmod +x "$bin"
+  local contents="$1/$2/Unity.app/Contents"
+  mkdir -p "$contents/MacOS"
+  printf '<plist version="1.0"></plist>\n' > "$contents/Info.plist"
+  printf '#!/bin/sh\nexit 0\n' > "$contents/MacOS/Unity"
+  chmod +x "$contents/MacOS/Unity"
+}
+
+# make_broken_editor <hub dir> <install dir name>: a damaged install, as Hub left one here:
+# the executable is there, Info.plist is not.
+make_broken_editor() {
+  make_editor "$1" "$2"
+  rm "$1/$2/Unity.app/Contents/Info.plist"
 }
 
 # write_project_version <project dir> <version>: a ProjectVersion.txt like the editor writes.
@@ -104,10 +114,10 @@ HUB="$WORK/hub editors"
 assert_exit 2 env UNITY_EDITOR=/nonexistent UNITY_PROJECT_DIR="$NOPROJ" "$UNITY_SH" path
 assert_output_contains "/nonexistent" env UNITY_EDITOR=/nonexistent UNITY_PROJECT_DIR="$NOPROJ" "$UNITY_SH" path
 
-# No editor under the Hub directory: the message names the pinned version and the path it tried.
+# No editor under the Hub directory: the message names the pinned version and both paths it tried.
 mkdir -p "$WORK/empty hub"
 assert_exit 2 env UNITY_HUB_EDITORS_DIR="$WORK/empty hub" UNITY_PROJECT_DIR="$NOPROJ" "$UNITY_SH" path
-assert_output_contains "Unity $VERSION not found at $WORK/empty hub/$VERSION/Unity.app/Contents/MacOS/Unity" \
+assert_output_contains "Unity $VERSION not found at $WORK/empty hub/$VERSION-arm64/Unity.app/Contents/MacOS/Unity or $WORK/empty hub/$VERSION/Unity.app/Contents/MacOS/Unity" \
   env UNITY_HUB_EDITORS_DIR="$WORK/empty hub" UNITY_PROJECT_DIR="$NOPROJ" "$UNITY_SH" path
 
 # Editor installed under the Hub directory.
@@ -116,12 +126,51 @@ assert_exit 0 env UNITY_HUB_EDITORS_DIR="$HUB" UNITY_PROJECT_DIR="$NOPROJ" "$UNI
 assert_output_contains "$HUB/$VERSION/Unity.app/Contents/MacOS/Unity" \
   env UNITY_HUB_EDITORS_DIR="$HUB" UNITY_PROJECT_DIR="$NOPROJ" "$UNITY_SH" path
 
+# Install folders: <version>-arm64 is tried first, then <version>. A folder only counts if it has
+# Unity.app/Contents/Info.plist and an executable MacOS/Unity.
+BIN="Unity.app/Contents/MacOS/Unity"
+mkdir -p "$WORK/hubs"
+make_editor "$WORK/hubs/arm-only" "$VERSION-arm64"
+make_editor "$WORK/hubs/both" "$VERSION-arm64"
+make_editor "$WORK/hubs/both" "$VERSION"
+make_editor "$WORK/hubs/plain-only" "$VERSION"
+make_broken_editor "$WORK/hubs/broken-only" "$VERSION"
+make_broken_editor "$WORK/hubs/broken-plus-arm" "$VERSION"
+make_editor "$WORK/hubs/broken-plus-arm" "$VERSION-arm64"
+make_broken_editor "$WORK/hubs/broken-arm-plus-plain" "$VERSION-arm64"
+make_editor "$WORK/hubs/broken-arm-plus-plain" "$VERSION"
+make_editor "$WORK/hubs/not-executable" "$VERSION"
+chmod -x "$WORK/hubs/not-executable/$VERSION/$BIN"
+
+assert_exit 0 env UNITY_HUB_EDITORS_DIR="$WORK/hubs/arm-only" UNITY_PROJECT_DIR="$NOPROJ" "$UNITY_SH" path
+assert_output_contains "$WORK/hubs/arm-only/$VERSION-arm64/$BIN" \
+  env UNITY_HUB_EDITORS_DIR="$WORK/hubs/arm-only" UNITY_PROJECT_DIR="$NOPROJ" "$UNITY_SH" path
+assert_output_contains "$WORK/hubs/both/$VERSION-arm64/$BIN" \
+  env UNITY_HUB_EDITORS_DIR="$WORK/hubs/both" UNITY_PROJECT_DIR="$NOPROJ" "$UNITY_SH" path
+assert_output_contains "$WORK/hubs/plain-only/$VERSION/$BIN" \
+  env UNITY_HUB_EDITORS_DIR="$WORK/hubs/plain-only" UNITY_PROJECT_DIR="$NOPROJ" "$UNITY_SH" path
+# A damaged <version> alone is an error that names it; a complete <version>-arm64 beside it wins.
+assert_exit 2 env UNITY_HUB_EDITORS_DIR="$WORK/hubs/broken-only" UNITY_PROJECT_DIR="$NOPROJ" "$UNITY_SH" path
+assert_output_contains "Unity $VERSION install at $WORK/hubs/broken-only/$VERSION is incomplete (no Info.plist). Repair or remove it in Unity Hub, or set UNITY_EDITOR." \
+  env UNITY_HUB_EDITORS_DIR="$WORK/hubs/broken-only" UNITY_PROJECT_DIR="$NOPROJ" "$UNITY_SH" path
+assert_output_contains "$WORK/hubs/broken-plus-arm/$VERSION-arm64/$BIN" \
+  env UNITY_HUB_EDITORS_DIR="$WORK/hubs/broken-plus-arm" UNITY_PROJECT_DIR="$NOPROJ" "$UNITY_SH" path
+# A damaged -arm64 doesn't hide a complete <version>.
+assert_output_contains "$WORK/hubs/broken-arm-plus-plain/$VERSION/$BIN" \
+  env UNITY_HUB_EDITORS_DIR="$WORK/hubs/broken-arm-plus-plain" UNITY_PROJECT_DIR="$NOPROJ" "$UNITY_SH" path
+# Info.plist present but the binary not executable: incomplete too.
+assert_exit 2 env UNITY_HUB_EDITORS_DIR="$WORK/hubs/not-executable" UNITY_PROJECT_DIR="$NOPROJ" "$UNITY_SH" path
+assert_output_contains "install at $WORK/hubs/not-executable/$VERSION is incomplete" \
+  env UNITY_HUB_EDITORS_DIR="$WORK/hubs/not-executable" UNITY_PROJECT_DIR="$NOPROJ" "$UNITY_SH" path
+
 # UNITY_EDITOR wins over the Hub directory, but only if it is an executable file.
 printf '#!/bin/sh\nexit 0\n' > "$WORK/exec-editor"
 chmod +x "$WORK/exec-editor"
 printf 'not executable\n' > "$WORK/plain-file"
 assert_exit 0 env UNITY_EDITOR="$WORK/exec-editor" UNITY_HUB_EDITORS_DIR="$WORK/empty hub" UNITY_PROJECT_DIR="$NOPROJ" "$UNITY_SH" path
 assert_output_contains "$WORK/exec-editor" env UNITY_EDITOR="$WORK/exec-editor" UNITY_PROJECT_DIR="$NOPROJ" "$UNITY_SH" path
+# ... even over a Hub directory whose only install is damaged.
+assert_exit 0 env UNITY_EDITOR="$WORK/exec-editor" UNITY_HUB_EDITORS_DIR="$WORK/hubs/broken-only" UNITY_PROJECT_DIR="$NOPROJ" "$UNITY_SH" path
 assert_exit 2 env UNITY_EDITOR="$WORK/plain-file" UNITY_PROJECT_DIR="$NOPROJ" "$UNITY_SH" path
 
 # ProjectVersion.txt must agree with the pin (m_EditorVersionWithRevision must not confuse the parser).
@@ -139,12 +188,13 @@ assert_exit 2 "$UNITY_SH"
 assert_exit 2 "$UNITY_SH" bogus
 
 # ---------------------------------------------------------------------------------------------
-# The scripts find the repo from their own location: a copy of tools/ci in a path with a space,
+# The scripts find the repo from their own location: a copy of tools/ci and tools/lib in a path with a space,
 # run from an unrelated working directory.
 # ---------------------------------------------------------------------------------------------
 COPY="$WORK/repo copy"
-mkdir -p "$COPY/tools/ci" "$COPY/unity/MotionBowling" "$WORK/elsewhere"
+mkdir -p "$COPY/tools/ci" "$COPY/tools/lib" "$COPY/unity/MotionBowling" "$WORK/elsewhere"
 cp -R "$CI/." "$COPY/tools/ci/"
+cp -R "$ROOT/tools/lib/." "$COPY/tools/lib/"
 
 assert_exit 1 in_dir "$WORK/elsewhere" "$COPY/tools/ci/unity.sh" create
 assert_output_contains "already exists" in_dir "$WORK/elsewhere" "$COPY/tools/ci/unity.sh" create
@@ -154,8 +204,9 @@ assert_output_contains "$HUB/$VERSION/Unity.app/Contents/MacOS/Unity" \
 
 # Without unity-version.txt, the version comes from ProjectVersion.txt in the default project dir.
 COPY2="$WORK/repo copy two"
-mkdir -p "$COPY2/tools/ci"
+mkdir -p "$COPY2/tools/ci" "$COPY2/tools/lib"
 cp -R "$CI/." "$COPY2/tools/ci/"
+cp -R "$ROOT/tools/lib/." "$COPY2/tools/lib/"
 rm -f "$COPY2/tools/ci/unity-version.txt"
 write_project_version "$COPY2/unity/MotionBowling" "6000.3.5f1"
 make_editor "$HUB" "6000.3.5f1"

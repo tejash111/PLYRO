@@ -12,9 +12,12 @@
 # Editor resolution:
 #   Version: m_EditorVersion in <project>/ProjectSettings/ProjectVersion.txt if that file exists,
 #            else tools/ci/unity-version.txt. If both exist and differ, that is an error.
-#   Path:    $UNITY_HUB_EDITORS_DIR/<version>/Unity.app/Contents/MacOS/Unity
-#            (UNITY_HUB_EDITORS_DIR defaults to /Applications/Unity/Hub/Editor, as in tools/dev/check-env.sh)
-#            or $UNITY_EDITOR, if set, which wins and must be an executable file.
+#   Path:    $UNITY_EDITOR, if set, which wins and must be an executable file. Otherwise the first valid
+#            of $UNITY_HUB_EDITORS_DIR/<version>-arm64 and $UNITY_HUB_EDITORS_DIR/<version>, each with
+#            Unity.app/Contents/MacOS/Unity (UNITY_HUB_EDITORS_DIR defaults to
+#            /Applications/Unity/Hub/Editor, as in tools/dev/check-env.sh). A folder is valid only if
+#            it has Unity.app/Contents/Info.plist and an executable MacOS/Unity; see
+#            tools/lib/unity_editor.sh, which check-env.sh shares.
 #
 # Environment:
 #   UNITY_EDITOR            Full path of the editor binary. Overrides the Hub lookup.
@@ -23,7 +26,7 @@
 #                           (found from this script's location, so any working directory works).
 #   UNITY_LOG_NAME          Log file name for run/exec: <project>/Logs/ci/<name>.log (default "run").
 #
-# Exit codes: 2 for a missing or mismatched editor, a missing project, or bad usage. 1 if create finds
+# Exit codes: 2 for a missing, incomplete or mismatched editor, a missing project, or bad usage. 1 if create finds
 # the project directory already there or Unity creates nothing. run/exec pass the editor's code through.
 # Errors go to stderr as "ERROR: ...".
 set -euo pipefail
@@ -35,6 +38,9 @@ PROJECT_DIR="${UNITY_PROJECT_DIR:-$REPO_ROOT/unity/MotionBowling}"
 PROJECT_VERSION_FILE="$PROJECT_DIR/ProjectSettings/ProjectVersion.txt"
 LOG_DIR="$PROJECT_DIR/Logs/ci"
 EDITORS_DIR="${UNITY_HUB_EDITORS_DIR:-/Applications/Unity/Hub/Editor}"
+
+# shellcheck source=../lib/unity_editor.sh
+source "$SCRIPT_DIR/../lib/unity_editor.sh"
 
 VERSION=""
 EDITOR_BIN=""
@@ -81,10 +87,13 @@ resolve_editor() {
     return 0
   fi
   [ -n "$VERSION" ] || die 2 "no Unity version: $PIN_FILE is missing or empty and there is no ProjectVersion.txt."
-  EDITOR_BIN="$EDITORS_DIR/$VERSION/Unity.app/Contents/MacOS/Unity"
-  if [ ! -f "$EDITOR_BIN" ] || [ ! -x "$EDITOR_BIN" ]; then
-    die 2 "Unity $VERSION not found at $EDITOR_BIN. Install it (docs/dev-setup.md) or set UNITY_EDITOR."
+  if ! unity_find_editor "$EDITORS_DIR" "$VERSION"; then
+    if [ -n "$unity_editor_broken_dir" ]; then
+      die 2 "Unity $VERSION install at $unity_editor_broken_dir is incomplete ($unity_editor_broken_why). Repair or remove it in Unity Hub, or set UNITY_EDITOR."
+    fi
+    die 2 "Unity $VERSION not found at $unity_editor_tried. Install it (docs/dev-setup.md) or set UNITY_EDITOR."
   fi
+  EDITOR_BIN="$unity_editor_bin"
 }
 
 cmd_path() {
