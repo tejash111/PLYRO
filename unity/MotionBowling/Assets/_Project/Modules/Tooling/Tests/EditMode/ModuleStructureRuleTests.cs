@@ -110,7 +110,7 @@ namespace Bowling.Tooling.Tests
         public void AGuidThatResolvesToAnotherAssemblyIsNotTheContractsReference()
         {
             string guid = AssetDatabase.AssetPathToGUID(ToolingEditorAsmdef);
-            Assume.That(guid, Is.Not.Empty);
+            Assert.That(guid, Is.Not.Empty);
 
             List<Violation> violations = Run(TempGameplayModule("GUID:" + guid));
 
@@ -137,7 +137,7 @@ namespace Bowling.Tooling.Tests
             _importedTempAsset = true;
             AssetDatabase.ImportAsset(assetPath);
             string guid = AssetDatabase.AssetPathToGUID(assetPath);
-            Assume.That(guid, Is.Not.Empty);
+            Assert.That(guid, Is.Not.Empty);
             return guid;
         }
 

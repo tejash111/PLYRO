@@ -87,7 +87,7 @@ namespace Bowling.Tooling.Tests
         public void GuidOfTheOwnModuleAssemblyPassesForATestAssembly()
         {
             string toolingEditor = AssetDatabase.AssetPathToGUID(ToolingEditorAsmdef);
-            Assume.That(toolingEditor, Is.Not.Empty);
+            Assert.That(toolingEditor, Is.Not.Empty);
             ValidationContext context = TempContext(
                 "Tooling", "Tests/EditMode", "Bowling.Tooling.Tests.EditMode", "GUID:" + toolingEditor);
 
@@ -98,7 +98,7 @@ namespace Bowling.Tooling.Tests
         public void GuidOfADisallowedAssemblyIsReportedByItsResolvedName()
         {
             string testsGuid = AssetDatabase.AssetPathToGUID(ToolingTestsAsmdef);
-            Assume.That(testsGuid, Is.Not.Empty);
+            Assert.That(testsGuid, Is.Not.Empty);
             ValidationContext context = TempContext("Tooling", "Editor", "Bowling.Tooling.Editor", "GUID:" + testsGuid);
 
             List<Violation> violations = Run(context);
@@ -133,7 +133,7 @@ namespace Bowling.Tooling.Tests
         {
             string guid = AssetDatabase.FindAssets(assemblyName + " t:AssemblyDefinitionAsset")
                 .FirstOrDefault(g => AssetDatabase.GUIDToAssetPath(g).EndsWith("/" + assemblyName + ".asmdef", StringComparison.Ordinal));
-            Assume.That(guid, Is.Not.Null, "no asmdef named " + assemblyName + " in the project");
+            Assert.That(guid, Is.Not.Null, "no asmdef named " + assemblyName + " in the project");
             return guid;
         }
 

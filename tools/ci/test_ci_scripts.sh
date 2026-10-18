@@ -29,6 +29,19 @@ in_dir() {
   (cd "$dir" && "$@")
 }
 
+# output_lacks <needle> <cmd...>: the command's output (stdout and stderr) does not contain the needle.
+output_lacks() {
+  local needle="$1" out
+  shift
+  out="$("$@" 2>&1)" || true
+  case "$out" in
+    *"$needle"*)
+      printf '%s\n' "$out"
+      return 1
+      ;;
+  esac
+}
+
 # make_editor <hub dir> <install dir name>: a complete fake install, like Unity Hub makes it:
 # <hub dir>/<name>/Unity.app/Contents/Info.plist and an executable MacOS/Unity.
 # <name> is the version, or <version>-arm64.
@@ -75,6 +88,37 @@ assert_output_contains "Bowling.Foo.Tests.AlsoBreaks" "$CHECK" "$FIXTURES/failed
 # zero.xml reports result="Passed" with total="0": no tests ran, so it fails.
 assert_exit 1 "$CHECK" "$FIXTURES/zero.xml"
 assert_output_contains "total=0" "$CHECK" "$FIXTURES/zero.xml"
+
+# inconclusive.xml: the run says Passed with failed="0", but two tests were inconclusive (a failed
+# Assume.That, for example). An inconclusive test proved nothing, so the gate fails (ruling R26) and
+# lists the inconclusive cases, not the passing one.
+assert_exit 1 "$CHECK" "$FIXTURES/inconclusive.xml"
+assert_output_contains "FAIL inconclusive=2" "$CHECK" "$FIXTURES/inconclusive.xml"
+assert_output_contains "  Bowling.Foo.Tests.NeedsAnAsset" "$CHECK" "$FIXTURES/inconclusive.xml"
+assert_output_contains 'Bowling.Foo.Tests.Another("x")' "$CHECK" "$FIXTURES/inconclusive.xml"
+assert_exit 0 output_lacks "Tests.Passes" "$CHECK" "$FIXTURES/inconclusive.xml"
+assert_exit 0 output_lacks "PASS" "$CHECK" "$FIXTURES/inconclusive.xml"
+# The inconclusive list holds only inconclusive cases, and the failed list only failed ones.
+assert_exit 0 output_lacks "Breaks" "$CHECK" "$FIXTURES/inconclusive.xml"
+assert_exit 0 output_lacks "NeedsAnAsset" "$CHECK" "$FIXTURES/failed.xml"
+
+# inconclusive="0" passes. A missing attribute counts as 0 (the older fixtures have none), but an
+# inconclusive test-case still fails the run, and so does an attribute that isn't a number.
+printf '<test-run result="Passed" total="2" passed="2" failed="0" inconclusive="0"><test-case fullname="A.B" result="Passed"/></test-run>\n' > "$WORK/zero-inconclusive.xml"
+assert_exit 0 "$CHECK" "$WORK/zero-inconclusive.xml"
+assert_output_contains "PASS total=2" "$CHECK" "$WORK/zero-inconclusive.xml"
+printf '<test-run result="Passed" total="2" failed="0"><test-case fullname="A.B" result="Passed"/><test-case fullname="A.C" result="Inconclusive"/></test-run>\n' > "$WORK/case-only.xml"
+assert_exit 1 "$CHECK" "$WORK/case-only.xml"
+assert_output_contains "FAIL inconclusive=1" "$CHECK" "$WORK/case-only.xml"
+assert_output_contains "  A.C" "$CHECK" "$WORK/case-only.xml"
+printf '<test-run result="Passed" total="2" failed="0" inconclusive="many"/>\n' > "$WORK/bad-inconclusive.xml"
+assert_exit 1 "$CHECK" "$WORK/bad-inconclusive.xml"
+assert_output_contains "inconclusive" "$CHECK" "$WORK/bad-inconclusive.xml"
+# A failure wins over an inconclusive count, and only the failures are listed.
+printf '<test-run result="Failed(Child)" total="3" failed="1" inconclusive="1"><test-case fullname="A.Bad" result="Failed"/><test-case fullname="A.Meh" result="Inconclusive"/></test-run>\n' > "$WORK/both.xml"
+assert_exit 1 "$CHECK" "$WORK/both.xml"
+assert_output_contains "FAIL failed=1 of total=3" "$CHECK" "$WORK/both.xml"
+assert_exit 0 output_lacks "A.Meh" "$CHECK" "$WORK/both.xml"
 
 assert_exit 1 "$CHECK" "$WORK/missing-results.xml"
 assert_output_contains "no results file" "$CHECK" "$WORK/missing-results.xml"
@@ -302,6 +346,8 @@ assert_output_contains "-testPlatform PlayMode -testResults $PROJ/Logs/ci/PlayMo
 assert_exit 1 env "${FAKE_ENV[@]}" FAKE_UNITY_RESULTS="$FIXTURES/failed.xml" FAKE_UNITY_EXIT=2 "$RUN_TESTS" EditMode
 assert_output_contains "Bowling.Foo.Tests.Breaks" env "${FAKE_ENV[@]}" FAKE_UNITY_RESULTS="$FIXTURES/failed.xml" "$RUN_TESTS" EditMode
 assert_exit 1 env "${FAKE_ENV[@]}" FAKE_UNITY_RESULTS="$FIXTURES/zero.xml" "$RUN_TESTS" EditMode
+assert_exit 1 env "${FAKE_ENV[@]}" FAKE_UNITY_RESULTS="$FIXTURES/inconclusive.xml" "$RUN_TESTS" EditMode
+assert_output_contains "FAIL inconclusive=2" env "${FAKE_ENV[@]}" FAKE_UNITY_RESULTS="$FIXTURES/inconclusive.xml" "$RUN_TESTS" EditMode
 assert_exit 0 env "${FAKE_ENV[@]}" FAKE_UNITY_RESULTS="$FIXTURES/passed.xml" FAKE_UNITY_EXIT=2 "$RUN_TESTS" EditMode
 
 # A stale results file from an earlier run must not pass when Unity writes nothing.

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<test-run id="2" testcasecount="3" result="Passed" total="3" passed="1" failed="0" inconclusive="2" skipped="0" asserts="1" engine-version="3.5.0.0">
+  <test-suite type="Assembly" name="Bowling.Foo.dll" fullname="Bowling.Foo.dll" result="Passed" total="3" passed="1" failed="0" inconclusive="2" skipped="0">
+    <test-case name="Passes" fullname="Bowling.Foo.Tests.Passes" result="Passed" />
+    <test-case name="NeedsAnAsset" fullname="Bowling.Foo.Tests.NeedsAnAsset" result="Inconclusive"><reason><message><![CDATA[Expected: not null But was: null]]></message></reason></test-case>
+    <test-case name="Another" fullname="Bowling.Foo.Tests.Another(&quot;x&quot;)" result="Inconclusive" />
+  </test-suite>
+</test-run>
