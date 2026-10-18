@@ -9,9 +9,9 @@ using UnityEngine;
 namespace Bowling.Tooling.Editor
 {
     /// <summary>
-    /// G-6 (foundation spec, section 8.1): a color texture under <c>Assets/_Project/Art</c> or
-    /// <c>Assets/_Project/Modules/UI</c> (or <see cref="ValidationContext.TextureSearchRoots"/>) may not hold a smooth
-    /// ramp, judged by <see cref="GradientHeuristic"/> with the thresholds of <see cref="GradientHeuristicSettings"/>.
+    /// G-6 (foundation spec, section 8.1): a color texture anywhere under <c>Assets/_Project</c> except the Tooling
+    /// module (or under <see cref="ValidationContext.TextureSearchRoots"/>) may not hold a smooth ramp, judged by
+    /// <see cref="GradientHeuristic"/> with the thresholds of <see cref="GradientHeuristicSettings"/>.
     /// <para>
     /// The rule reads the source PNG bytes, so any other color-texture file fails with "convert to PNG", a texture
     /// saved as a native <c>.asset</c> (<c>Texture2D</c>, <c>Cubemap</c>, <c>Texture2DArray</c>) included. Normal maps,
@@ -22,13 +22,12 @@ namespace Bowling.Tooling.Editor
     /// </summary>
     public sealed class TextureGradientRule : IValidationRule
     {
-        public const string ArtRoot = "Assets/_Project/Art";
-        public const string UiRoot = "Assets/_Project/Modules/UI";
+        public const string ProjectRoot = "Assets/_Project";
 
         public string Id => "G-6";
 
-        /// <summary>The folders scanned when the context names none.</summary>
-        public static IReadOnlyList<string> DefaultRoots => new[] { ArtRoot, UiRoot };
+        /// <summary>The folders scanned when the context names none: all of the project's own assets (Tooling and vendor folders are filtered out).</summary>
+        public static IReadOnlyList<string> DefaultRoots => new[] { ProjectRoot };
 
         public IEnumerable<Violation> Run(ValidationContext context)
         {
@@ -53,7 +52,7 @@ namespace Bowling.Tooling.Editor
         }
 
         // The folders to scan. An explicit folder that is missing is a violation; a missing default is skipped
-        // (the project has no Art folder until art arrives).
+        // silently (ruling R16).
         string[] ExistingRoots(ValidationContext context, List<Violation> violations)
         {
             bool named = context.TextureSearchRoots != null;

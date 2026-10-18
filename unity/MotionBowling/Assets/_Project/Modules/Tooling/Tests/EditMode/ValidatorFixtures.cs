@@ -35,6 +35,7 @@ namespace Bowling.Tooling.Tests
                 RepoRoot = caseDir,
                 ProjectRoot = caseDir,
                 ModulesRoot = Path.Combine(caseDir, "Modules"),
+                AssetsRoot = caseDir,
                 Rules = ModuleRules.Load(rulesFile),
             };
         }

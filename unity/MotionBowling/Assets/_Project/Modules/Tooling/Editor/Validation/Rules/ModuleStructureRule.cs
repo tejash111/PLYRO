@@ -12,7 +12,9 @@ namespace Bowling.Tooling.Editor
     /// with the <c>name</c>, <c>rootNamespace</c>, <c>includePlatforms</c> and required fields of their kind
     /// (a runtime asmdef other than Contracts references <c>Bowling.Contracts</c>).
     /// Which asmdefs a module has comes from its flags in <c>module-rules.json</c>. A module folder that is
-    /// missing is one violation for the folder, not one per file.
+    /// missing is one violation for the folder, not one per file. Two folder-level checks close the layout: no
+    /// <c>.asmref</c> anywhere under <c>Modules/</c>, and no <c>.asmdef</c> under <see cref="ValidationContext.AssetsRoot"/>
+    /// outside a module folder (vendor folders excepted).
     /// </summary>
     public sealed class ModuleStructureRule : IValidationRule
     {
@@ -44,8 +46,47 @@ namespace Bowling.Tooling.Editor
                 if (IsHidden(folder) || context.Rules.Modules.ContainsKey(folder)) continue;
                 violations.Add(Fail(context.ModulePath(folder), 0, "module folder is not listed under modules in tools/checks/module-rules.json"));
             }
+
+            CheckAsmrefs(context, modulesDir, violations);
+            CheckAsmdefsOutsideModules(context, modulesDir, violations);
             return violations;
         }
+
+        // An .asmref adds its folder's code to another assembly, which breaks the one-asmdef-per-folder layout of
+        // section 4, so there is none under Modules/.
+        void CheckAsmrefs(ValidationContext context, string modulesDir, List<Violation> violations)
+        {
+            foreach (string file in Files(modulesDir, "*.asmref").OrderBy(f => f, StringComparer.Ordinal))
+            {
+                string path = ValidationContext.PathUnder(context.ModulesRoot, Relative(modulesDir, file));
+                violations.Add(Fail(path, 0, "unexpected .asmref: it adds this folder's code to another assembly, and modules have only the asmdefs of foundation spec section 4"));
+            }
+        }
+
+        // Every assembly belongs to a module: an asmdef under Assets/ that is not inside a module folder is a
+        // violation (an asmdef inside one is judged by CheckModule). Vendor folders are not ours to judge.
+        void CheckAsmdefsOutsideModules(ValidationContext context, string modulesDir, List<Violation> violations)
+        {
+            string assetsDir = context.ResolvePath(context.AssetsRoot);
+            if (!Directory.Exists(assetsDir)) return;
+
+            foreach (string file in Files(assetsDir, "*.asmdef").OrderBy(f => f, StringComparer.Ordinal))
+            {
+                string relative = Relative(assetsDir, file);
+                if (ScanScope.IsVendor("Assets/" + relative) || IsInsideAModuleFolder(modulesDir, file)) continue;
+                violations.Add(Fail(ValidationContext.PathUnder(context.AssetsRoot, relative), 0,
+                    "asmdef outside a module folder: every assembly lives in Modules/<Module>/ (foundation spec section 4)"));
+            }
+        }
+
+        // True for a file at least two levels below Modules/: Modules/<Module>/.../x.asmdef.
+        static bool IsInsideAModuleFolder(string modulesDir, string file)
+        {
+            string relative = Relative(modulesDir, file);
+            return !relative.StartsWith("../", StringComparison.Ordinal) && relative.IndexOf('/') > 0;
+        }
+
+        static string Relative(string root, string file) => Path.GetRelativePath(root, file).Replace('\\', '/');
 
         void CheckModule(ValidationContext context, string modulesDir, string module, ModuleRules.ModuleInfo info, List<Violation> violations)
         {
@@ -61,7 +102,7 @@ namespace Bowling.Tooling.Editor
             foreach (ExpectedAsmdef asmdef in expected)
                 CheckAsmdef(context, moduleDir, asmdef, info, violations);
 
-            foreach (string file in AsmdefFiles(moduleDir).OrderBy(f => f, StringComparer.Ordinal))
+            foreach (string file in Files(moduleDir, "*.asmdef").OrderBy(f => f, StringComparer.Ordinal))
             {
                 string relative = Path.GetRelativePath(moduleDir, file).Replace('\\', '/');
                 if (expected.Any(e => e.RelativePath == relative)) continue;
@@ -161,15 +202,15 @@ namespace Bowling.Tooling.Editor
             }
         }
 
-        /// <summary>Every asmdef under a module folder, skipping hidden folders (a leading '.' or a trailing '~'), which Unity ignores.</summary>
-        static IEnumerable<string> AsmdefFiles(string directory)
+        /// <summary>Every file matching the pattern under a folder, skipping hidden folders (a leading '.' or a trailing '~'), which Unity ignores.</summary>
+        static IEnumerable<string> Files(string directory, string pattern)
         {
-            foreach (string file in Directory.GetFiles(directory, "*.asmdef"))
+            foreach (string file in Directory.GetFiles(directory, pattern))
                 yield return file;
             foreach (string sub in Directory.GetDirectories(directory))
             {
                 if (IsHidden(Path.GetFileName(sub))) continue;
-                foreach (string file in AsmdefFiles(sub))
+                foreach (string file in Files(sub, pattern))
                     yield return file;
             }
         }

@@ -51,6 +51,10 @@ namespace Bowling.Tooling.Tests
         // A runtime asmdef other than Contracts references Bowling.Contracts (Testing too).
         [TestCase("no-contracts-reference", "Bowling.Gameplay.asmdef", "Bowling.Contracts")]
         [TestCase("testing-no-contracts-reference", "Bowling.Testing.asmdef", "Bowling.Contracts")]
+        // Ruling R25: an .asmref under Modules/ and an asmdef outside a module folder.
+        [TestCase("asmref-in-module", "Extra.asmref", ".asmref")]
+        [TestCase("asmdef-outside-modules", "Bowling.Rogue.asmdef", "outside a module folder")]
+        [TestCase("asmdef-loose-in-modules", "Bowling.Loose.asmdef", "outside a module folder")]
         public void FailureReportsExactlyOneViolationNamingTheFile(string fixture, string name, string messagePart)
         {
             List<Violation> violations = Run(ValidatorFixtures.M1("fail/" + fixture));

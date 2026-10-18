@@ -242,12 +242,6 @@ namespace Bowling.Tooling.Tests
         }
 
         [Test]
-        public void TheDefaultFoldersAreTheArtAndUiFolders()
-        {
-            Assert.That(TextureGradientRule.DefaultRoots, Is.EqualTo(new[] { "Assets/_Project/Art", "Assets/_Project/Modules/UI" }));
-        }
-
-        [Test]
         public void PercentagesPrintWithADotWhateverTheCulture()
         {
             string path = TextureFixtures.Png(_folder, "Ramp", 256, 4, TextureFixtures.Ramp);

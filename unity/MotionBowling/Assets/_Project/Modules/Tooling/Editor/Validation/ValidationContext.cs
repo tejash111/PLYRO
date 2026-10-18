@@ -25,6 +25,12 @@ namespace Bowling.Tooling.Editor
         /// <summary>The folder that holds the module folders: project-relative, or absolute for a fixture.</summary>
         public string ModulesRoot = "Assets/_Project/Modules";
 
+        /// <summary>
+        /// The folder M-1 searches for asmdefs that sit outside <see cref="ModulesRoot"/>: project-relative, or
+        /// absolute for a fixture (where it is the case folder that holds <c>Modules/</c>).
+        /// </summary>
+        public string AssetsRoot = "Assets";
+
         public string MainScenePath = "Assets/_Project/Scenes/Main.unity";
 
         /// <summary>
@@ -44,9 +50,9 @@ namespace Bowling.Tooling.Editor
         public string AssetSearchRoot = DefaultAssetSearchRoot;
 
         /// <summary>
-        /// The asset folders G-6 scans for color textures. <c>null</c> (the default) means the two folders of the
-        /// spec, <c>Assets/_Project/Art</c> and <c>Assets/_Project/Modules/UI</c>, each skipped when it does not
-        /// exist. A folder named here that does not exist is a violation.
+        /// The asset folders G-6 scans for color textures. <c>null</c> (the default) means the folder of the spec,
+        /// <c>Assets/_Project</c> (Tooling and vendor folders are filtered out), skipped when it does not exist.
+        /// A folder named here that does not exist is a violation.
         /// </summary>
         public string[] TextureSearchRoots;
 
@@ -74,6 +80,9 @@ namespace Bowling.Tooling.Editor
             string root = ModulesRoot.Replace('\\', '/').TrimEnd('/');
             return relative == null ? $"{root}/{module}" : $"{root}/{module}/{relative}";
         }
+
+        /// <summary>The path as a violation prints it for a file under <paramref name="root"/> (<see cref="ModulesRoot"/> or <see cref="AssetsRoot"/>).</summary>
+        internal static string PathUnder(string root, string relative) => $"{root.Replace('\\', '/').TrimEnd('/')}/{relative}";
 
         /// <summary>The absolute path on disk of a path in this context (absolute as is, else under <see cref="ProjectRoot"/>).</summary>
         internal string ResolvePath(string path)
