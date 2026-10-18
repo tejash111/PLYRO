@@ -278,8 +278,8 @@ Two layers share one rule set:
 | G-2 | text | In `.cs`, ignoring lines whose first non-space characters are `//`: `new Gradient(`, `GradientColorKey`, `GradientAlphaKey`, `colorGradient`, `enableVertexGradient`, `VertexGradient`, `TMP_ColorGradient`, `AmbientMode.Trilight`, `AmbientMode.Skybox`, `ambientSkyColor`, `ambientEquatorColor`, `ambientGroundColor`, `RenderSettings.fog = true`, `Vignette`, `ScreenSpaceLensFlare` |
 | G-3 | text | In `.shadergraph`/`.shadersubgraph`: node types `UnityEditor.ShaderGraph.GradientNode`, `UnityEditor.ShaderGraph.SampleGradient`, `UnityEditor.ShaderGraph.BlackbodyNode` |
 | G-3b | text | Any `.shader`/`.hlsl`/`.shadergraph` under `_Project` that isn't listed in `tools/checks/reviewed-shaders.txt` (format: `<path> # reviewed by <name> on <date>: <why gradient-free>`) |
-| G-4 | editor | Every `VolumeProfile` asset under `Assets/` (vendor folders excluded): an active `Vignette`, `ScreenSpaceLensFlare`, `FilmGrain` or `Bloom` (Q-3 default) whose intensity is above 0. Unity 6's default profile carries every override at zero intensity, so zero-intensity overrides pass. |
-| G-5 | editor | Every scene in the build plus every prefab under `_Project`: `RenderSettings.ambientMode` not `Flat`; fog on; skybox not null; any `Camera.clearFlags == Skybox`; any `LineRenderer`/`TrailRenderer` whose `colorGradient` has more than one color key or more than one alpha key |
+| G-4 | editor | Every `VolumeProfile` asset under `Assets/` (vendor folders excluded): an active `Vignette`, `ScreenSpaceLensFlare`, `FilmGrain` or `Bloom` (Q-3 default) whose intensity is overridden and above 0 (URP ignores parameters that aren't overridden). Unity 6's default profile carries every override at zero intensity, so zero-intensity overrides pass. |
+| G-5 | editor | Every scene in the build plus every prefab under `_Project`: `RenderSettings.ambientMode` not `Flat`; fog on; skybox not null; any `Camera.clearFlags == Skybox`; any `LineRenderer`/`TrailRenderer` whose `colorGradient` is not one flat color (its color keys hold more than one distinct color, or its alpha keys more than one distinct alpha; Unity stores a one-key gradient as two equal keys) |
 | G-6 | editor | Every color `Texture2D`/`Sprite` under `_Project/Art/**` and `_Project/Modules/UI/**`. Skipped: normal maps, non-sRGB data textures, lightmaps. Fails when more than 2% of opaque pixels differ from a 4-neighbour by a small non-zero step (0 < Δ ≤ 3/255 on any channel), which is the signature of a smooth ramp. Thresholds live in `Tooling/Editor/Config/GradientHeuristic.asset`. The check reads the source PNG bytes, so any other color-texture format in the scanned folders fails G-6 with "convert to PNG". |
 
 ### 8.2 SOT-2 rules (modular structure)
@@ -363,6 +363,7 @@ Writing the implementation plan surfaced the changes now reflected above:
 - The Tooling folder layout.
 - G-2 ignores comment lines.
 - G-4 judges intensity and scans all of `Assets/`.
+- G-5 judges gradients by distinct values and G-4 by overridden intensity (execution-time rulings R14/R15).
 - G-6 reads PNG only.
 - Unity results judged from XML.
 - The helper scripts.
