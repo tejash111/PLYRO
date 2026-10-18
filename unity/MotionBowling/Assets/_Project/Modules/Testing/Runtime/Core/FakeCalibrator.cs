@@ -3,8 +3,11 @@ using Bowling.Contracts;
 
 namespace Bowling.Testing
 {
-    // An IPlayerCalibrator a test drives by hand. Begin and Cancel only move Step and raise no events.
-    // Complete and Fail set Step first, then raise StepChanged, then the outcome event.
+    // An IPlayerCalibrator a test drives by hand. Every method sets Step first and then raises events, so a
+    // handler sees the new step and may call back (for example Begin from Completed).
+    //
+    // Begin and Cancel raise StepChanged only when the step actually changes. Complete and Fail always
+    // raise StepChanged, then the outcome event (Completed or Failed).
     public sealed class FakeCalibrator : IPlayerCalibrator
     {
         public CalibrationStep Step { get; private set; } = CalibrationStep.Idle;
@@ -23,12 +26,12 @@ namespace Bowling.Testing
         public void Begin()
         {
             BeginCount++;
-            Step = CalibrationStep.WaitingForFullBody;
+            ChangeStep(CalibrationStep.WaitingForFullBody);
         }
 
         public void Cancel()
         {
-            Step = CalibrationStep.Idle;
+            ChangeStep(CalibrationStep.Idle);
         }
 
         public void Complete(PlayerProfile profile)
@@ -43,6 +46,17 @@ namespace Bowling.Testing
             Step = CalibrationStep.Failed;
             StepChanged?.Invoke(CalibrationStep.Failed);
             Failed?.Invoke(reason);
+        }
+
+        private void ChangeStep(CalibrationStep step)
+        {
+            if (Step == step)
+            {
+                return;
+            }
+
+            Step = step;
+            StepChanged?.Invoke(step);
         }
     }
 }

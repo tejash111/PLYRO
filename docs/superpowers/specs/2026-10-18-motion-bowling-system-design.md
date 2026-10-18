@@ -211,6 +211,7 @@ Contracts is the only assembly every module depends on. Its content is fixed by 
 - It contains only data types, interfaces, enums and `LaneSpec`. There is no behavior in it beyond trivial helpers.
 - It follows SOT-2: one type per file under `Modules/Contracts/Runtime/<Area>/`.
 - **Constructors:** every `readonly struct` has one public constructor taking all of its fields in declaration order, even where the listing below omits it for brevity. Classes with public fields need no constructor.
+- **Events:** implementations update their observable state before raising an event, and raise change events (`PhaseChanged`, `StepChanged`, `StateChanged`) on every actual change, so handlers see the new state and may call back into the source.
 
 ### 6.1 Pose (`Contracts/Runtime/Pose/`)
 
@@ -396,8 +397,8 @@ public interface IThrowSource                      // implemented by ThrowDetect
     void Arm(in ThrowContext context);
     void Disarm();
     event Action<SwingPhase> PhaseChanged;
-    event Action<ThrowEvent> Thrown;               // fires once, then source returns to Disarmed
-    event Action<ThrowRejection> Rejected;         // swing aborted; source returns to WaitingForReady
+    event Action<ThrowEvent> Thrown;               // fires once; the source is already Disarmed when it fires
+    event Action<ThrowRejection> Rejected;         // swing aborted; the source is already back in WaitingForReady when it fires
 }
 ```
 

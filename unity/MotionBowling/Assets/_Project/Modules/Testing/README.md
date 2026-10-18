@@ -6,22 +6,22 @@ Test-only fakes for every Contracts interface, so each module can be built and t
 
 ## Public API
 
-No MonoBehaviours. Every type is a public class in the namespace `Bowling.Testing`, one per file. The fakes implement the Contracts interfaces below, and the order in which each one sets state and raises events is pinned by `Tests/EditMode/`.
+No MonoBehaviours. Every type is a public class in the namespace `Bowling.Testing`, one per file. The fakes implement the Contracts interfaces below, and the order in which each one sets state and raises events is pinned by `Tests/EditMode/`. They follow the contract rule of system design section 6: a fake updates its observable state before it raises an event, so a handler sees the new state and may call back into the fake.
 
 - `FakeClock` (`IClock`): `Now` starts at 0; `Advance(seconds)` moves it forward and throws `ArgumentOutOfRangeException` for a negative or NaN amount.
 - Input:
   - `FakeTrackingSource` (`ITrackingSource`): `Push(PoseSample)`, `SetStatus`; `Start`/`Stop` set `Running`/`Stopped` and are counted in `StartCount`/`StopCount`. Starts `Stopped`.
   - `FakePlayerInput` (`IPlayerInput`): `SetPresent`, `SetStatus` (events only when the value changes), `PushPose(PlayerPose)`. Starts `Stopped`, absent, with no pose.
-  - `FakeCalibrator` (`IPlayerCalibrator`): `Complete(profile)`, `Fail(reason)`, `HoldProgress` setter; `BeginCount`.
+  - `FakeCalibrator` (`IPlayerCalibrator`): `Complete(profile)`, `Fail(reason)`, `HoldProgress` setter; `BeginCount`. `Begin` and `Cancel` raise `StepChanged` when the step changes.
   - `FakeHandCursor` (`IHandCursor`): `Set(active, position)`.
   - `FakeCameraPreview` (`ICameraPreview`): `Set(Texture)`.
   - `FakeTrackingDiagnostics` (`ITrackingDiagnostics`): `Set(TrackingStats)`, `SetCameras(...)`.
   - `FakeRecordingIndicator` (`IRecordingIndicator`): `Set(bool)`.
 - Throw and roll:
-  - `FakeThrowSource` (`IThrowSource`): `SetPhase`, `EmitThrow(ThrowEvent)`, `Reject(reason)`; records `LastContext`, `ArmCount` and `DisarmCount`. Only `SetPhase` raises `PhaseChanged`.
-  - `FakeRollSimulator` (`IRollSimulator`): `CompleteWith(standingAfter, gutter, reason)`, `RaiseMilestone`, `RaiseImpact`; records `LastRack`, `LastBumpers` and `LastThrow` with call counts. `SetRack` also sets `Standing`.
+  - `FakeThrowSource` (`IThrowSource`): `SetPhase`, `EmitThrow(ThrowEvent)`, `Reject(reason)`; records `LastContext`, `ArmCount` and `DisarmCount`. `Arm`, `Disarm`, `EmitThrow` and `Reject` raise `PhaseChanged` when the phase changes; `SetPhase` always raises. `Thrown` and `Rejected` fire after the phase has already moved to `Disarmed` / `WaitingForReady`.
+  - `FakeRollSimulator` (`IRollSimulator`): `CompleteWith(standingAfter, gutter, reason)`, `RaiseMilestone`, `RaiseImpact`; records `LastRack`, `LastBumpers` and `LastThrow` with call counts. `SetRack` also sets `Standing`. `CompleteWith` updates `Standing` and `IsRolling` before `Milestone(Settled)` and `Completed`, so a handler can call `SetRack` or `Roll`.
 - Game:
-  - `FakeGameEvents` (`IGameEvents`): `SetState`, `Publish(GameSnapshot)`, `RaiseRollScored`. `Current` starts as an Attract snapshot with no players.
+  - `FakeGameEvents` (`IGameEvents`): `SetState`, `Publish(GameSnapshot)`, `RaiseRollScored`. `Current` starts as an Attract snapshot with no players. `Publish` raises `StateChanged` when the state differs, then `SnapshotChanged`.
   - `FakeGameCommands` (`IGameCommands`): `Calls` (text, in order) and `SelectModeCalls` (typed).
   - `FakeUiCues` (`IUiCues`): `Raise(UiCue)`.
 - Platform:

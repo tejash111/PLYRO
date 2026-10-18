@@ -5,7 +5,8 @@ using NUnit.Framework;
 
 namespace Bowling.Testing.Tests
 {
-    // Pinned semantics of FakeThrowSource.
+    // Pinned semantics of FakeThrowSource (ruling R21: state first, then events, and PhaseChanged on every
+    // actual phase change). Each event name carries source.Phase as the handler saw it.
     public class FakeThrowSourceTests
     {
         private static readonly ThrowContext Context = new ThrowContext(
@@ -35,7 +36,7 @@ namespace Bowling.Testing.Tests
         }
 
         [Test]
-        public void ArmWaitsForReadyRecordsTheContextAndCountsWithoutRaising()
+        public void ArmWaitsForReadyRecordsTheContextAndRaisesPhaseChanged()
         {
             var source = new FakeThrowSource();
             List<string> events = Record(source);
@@ -49,27 +50,31 @@ namespace Bowling.Testing.Tests
             Assert.AreEqual(Difficulty.Pro, source.LastContext.Difficulty.Level);
             Assert.AreEqual(0.25f, source.LastContext.Difficulty.Assist);
             Assert.IsTrue(source.LastContext.Difficulty.Bumpers);
-            Assert.IsEmpty(events, "only SetPhase raises PhaseChanged");
+            Assert.That(events, Is.EqualTo(new[] { "PhaseChanged:WaitingForReady:WaitingForReady" }),
+                "the phase already holds the new value inside the handler");
         }
 
         [Test]
-        public void ArmTwiceKeepsTheLatestContextAndCountsBoth()
+        public void ArmAgainKeepsTheLatestContextAndRaisesNothingWhenThePhaseIsUnchanged()
         {
             var source = new FakeThrowSource();
             var easier = new ThrowContext(Context.Player, new DifficultyProfile(Difficulty.Casual, 1f, false));
-
             source.Arm(Context);
+            List<string> events = Record(source);
+
             source.Arm(easier);
 
             Assert.AreEqual(2, source.ArmCount);
             Assert.AreEqual(Difficulty.Casual, source.LastContext.Difficulty.Level);
+            Assert.IsEmpty(events, "WaitingForReady to WaitingForReady is not a change");
         }
 
         [Test]
-        public void DisarmSetsDisarmedCountsAndRaisesNothing()
+        public void DisarmSetsDisarmedCountsAndRaisesPhaseChanged()
         {
             var source = new FakeThrowSource();
             source.Arm(Context);
+            source.SetPhase(SwingPhase.Backswing);
             List<string> events = Record(source);
 
             source.Disarm();
@@ -77,6 +82,18 @@ namespace Bowling.Testing.Tests
             Assert.AreEqual(SwingPhase.Disarmed, source.Phase);
             Assert.AreEqual(1, source.DisarmCount);
             Assert.AreEqual(1, source.ArmCount);
+            Assert.That(events, Is.EqualTo(new[] { "PhaseChanged:Disarmed:Disarmed" }));
+        }
+
+        [Test]
+        public void DisarmWhileDisarmedCountsButRaisesNothing()
+        {
+            var source = new FakeThrowSource();
+            List<string> events = Record(source);
+
+            source.Disarm();
+
+            Assert.AreEqual(1, source.DisarmCount);
             Assert.IsEmpty(events);
         }
 
@@ -106,7 +123,7 @@ namespace Bowling.Testing.Tests
             source.SetPhase(SwingPhase.Ready);
             source.SetPhase(SwingPhase.Ready);
 
-            Assert.AreEqual(2, events.Count);
+            Assert.AreEqual(2, events.Count, "SetPhase is an explicit test control and always raises");
         }
 
         [Test]
@@ -121,19 +138,18 @@ namespace Bowling.Testing.Tests
         }
 
         [Test]
-        public void EmitThrowRaisesThrownThenDisarms()
+        public void EmitThrowDisarmsThenRaisesPhaseChangedThenThrown()
         {
             var source = new FakeThrowSource();
-            List<string> events = Record(source);
             source.Arm(Context);
             source.SetPhase(SwingPhase.Released);
-            events.Clear();
+            List<string> events = Record(source);
 
             source.EmitThrow(Throw);
 
-            Assert.That(events, Is.EqualTo(new[] { "Thrown:6.5:Released" }),
-                "the handler runs while the phase is still Released");
-            Assert.AreEqual(SwingPhase.Disarmed, source.Phase, "disarmed only after the event");
+            Assert.That(events, Is.EqualTo(new[] { "PhaseChanged:Disarmed:Disarmed", "Thrown:6.5:Disarmed" }),
+                "the source is already Disarmed when PhaseChanged and Thrown fire, in that order");
+            Assert.AreEqual(SwingPhase.Disarmed, source.Phase);
         }
 
         [Test]
@@ -156,6 +172,27 @@ namespace Bowling.Testing.Tests
         }
 
         [Test]
+        public void ThrownHandlerMayReArmAndTheSourceStaysArmed()
+        {
+            var source = new FakeThrowSource();
+            source.Arm(Context);
+            List<string> events = Record(source);
+            source.Thrown += e => source.Arm(Context);
+
+            source.EmitThrow(Throw);
+
+            Assert.AreEqual(SwingPhase.WaitingForReady, source.Phase, "nothing disarms it after the handler");
+            Assert.AreEqual(2, source.ArmCount);
+            Assert.That(events, Is.EqualTo(new[]
+            {
+                "PhaseChanged:Disarmed:Disarmed",
+                "Thrown:6.5:Disarmed",
+                "PhaseChanged:WaitingForReady:WaitingForReady",
+            }), "the re-arm inside Thrown is a real change from Disarmed, so it raises PhaseChanged");
+            Assert.DoesNotThrow(() => source.EmitThrow(Throw), "and it can throw again");
+        }
+
+        [Test]
         public void SecondEmitThrowThrowsBecauseTheFirstDisarmed()
         {
             var source = new FakeThrowSource();
@@ -166,19 +203,48 @@ namespace Bowling.Testing.Tests
         }
 
         [Test]
-        public void RejectRaisesRejectedThenWaitsForReady()
+        public void RejectWaitsForReadyThenRaisesPhaseChangedThenRejected()
         {
             var source = new FakeThrowSource();
-            List<string> events = Record(source);
             source.Arm(Context);
             source.SetPhase(SwingPhase.Backswing);
-            events.Clear();
+            List<string> events = Record(source);
 
             source.Reject(ThrowRejection.SwingTooSmall);
 
-            Assert.That(events, Is.EqualTo(new[] { "Rejected:SwingTooSmall:Backswing" }),
-                "the handler runs while the phase is still Backswing");
-            Assert.AreEqual(SwingPhase.WaitingForReady, source.Phase, "back to WaitingForReady only after the event");
+            Assert.That(events, Is.EqualTo(new[]
+            {
+                "PhaseChanged:WaitingForReady:WaitingForReady",
+                "Rejected:SwingTooSmall:WaitingForReady",
+            }), "the source is already back in WaitingForReady when both events fire");
+            Assert.AreEqual(SwingPhase.WaitingForReady, source.Phase);
+        }
+
+        [Test]
+        public void RejectFromWaitingForReadyRaisesOnlyRejected()
+        {
+            var source = new FakeThrowSource();
+            source.Arm(Context);
+            List<string> events = Record(source);
+
+            source.Reject(ThrowRejection.PlayerLeft);
+
+            Assert.That(events, Is.EqualTo(new[] { "Rejected:PlayerLeft:WaitingForReady" }),
+                "the phase did not change, so there is no PhaseChanged");
+        }
+
+        [Test]
+        public void RejectedHandlerMayDisarmAndTheSourceStaysDisarmed()
+        {
+            var source = new FakeThrowSource();
+            source.Arm(Context);
+            source.SetPhase(SwingPhase.Backswing);
+            source.Rejected += reason => source.Disarm();
+
+            source.Reject(ThrowRejection.LowConfidence);
+
+            Assert.AreEqual(SwingPhase.Disarmed, source.Phase, "nothing re-arms it after the handler");
+            Assert.AreEqual(1, source.DisarmCount);
         }
 
         [Test]

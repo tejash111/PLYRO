@@ -4,7 +4,8 @@ using NUnit.Framework;
 
 namespace Bowling.Testing.Tests
 {
-    // Pinned semantics of FakeCalibrator.
+    // Pinned semantics of FakeCalibrator (ruling R21: state first, then events, and StepChanged on every
+    // actual step change). Each event name carries calibrator.Step as the handler saw it.
     public class FakeCalibratorTests
     {
         private static readonly PlayerProfile Profile = new PlayerProfile(Handedness.Left, 0.62f, 0.41f, 0.55f);
@@ -29,25 +30,28 @@ namespace Bowling.Testing.Tests
         }
 
         [Test]
-        public void BeginWaitsForFullBodyCountsAndRaisesNothing()
+        public void BeginWaitsForFullBodyAndRaisesStepChangedOnlyWhenTheStepChanges()
         {
             var calibrator = new FakeCalibrator();
             List<string> events = Record(calibrator);
 
             calibrator.Begin();
+            Assert.That(events, Is.EqualTo(new[] { "StepChanged:WaitingForFullBody:WaitingForFullBody" }),
+                "the step already holds the new value inside the handler");
+
             calibrator.Begin();
 
             Assert.AreEqual(CalibrationStep.WaitingForFullBody, calibrator.Step);
             Assert.AreEqual(2, calibrator.BeginCount);
-            Assert.IsEmpty(events);
+            Assert.AreEqual(1, events.Count, "WaitingForFullBody to WaitingForFullBody is not a change");
         }
 
         [Test]
         public void CompleteSetsDoneThenRaisesStepChangedThenCompleted()
         {
             var calibrator = new FakeCalibrator();
-            List<string> events = Record(calibrator);
             calibrator.Begin();
+            List<string> events = Record(calibrator);
 
             calibrator.Complete(Profile);
 
@@ -75,8 +79,8 @@ namespace Bowling.Testing.Tests
         public void FailSetsFailedThenRaisesStepChangedThenFailed()
         {
             var calibrator = new FakeCalibrator();
-            List<string> events = Record(calibrator);
             calibrator.Begin();
+            List<string> events = Record(calibrator);
 
             calibrator.Fail(CalibrationFailure.PlayerLeft);
 
@@ -85,16 +89,54 @@ namespace Bowling.Testing.Tests
         }
 
         [Test]
-        public void CancelSetsIdleAndRaisesNothing()
+        public void CompletedHandlerMayBeginAgainAndTheNewStepSticks()
+        {
+            var calibrator = new FakeCalibrator();
+            calibrator.Completed += profile => calibrator.Begin();
+
+            calibrator.Complete(Profile);
+
+            Assert.AreEqual(CalibrationStep.WaitingForFullBody, calibrator.Step, "nothing overwrites it after the handler");
+            Assert.AreEqual(1, calibrator.BeginCount);
+        }
+
+        [Test]
+        public void FailedHandlerMayBeginAgainAndTheNewStepSticks()
+        {
+            var calibrator = new FakeCalibrator();
+            calibrator.Failed += reason => calibrator.Begin();
+
+            calibrator.Fail(CalibrationFailure.Timeout);
+
+            Assert.AreEqual(CalibrationStep.WaitingForFullBody, calibrator.Step);
+        }
+
+        [Test]
+        public void CancelSetsIdleAndRaisesStepChangedOnlyWhenTheStepChanges()
         {
             var calibrator = new FakeCalibrator();
             calibrator.Begin();
             List<string> events = Record(calibrator);
 
             calibrator.Cancel();
+            Assert.That(events, Is.EqualTo(new[] { "StepChanged:Idle:Idle" }));
+
+            calibrator.Cancel();
 
             Assert.AreEqual(CalibrationStep.Idle, calibrator.Step);
-            Assert.IsEmpty(events);
+            Assert.AreEqual(1, events.Count, "Idle to Idle is not a change");
+        }
+
+        [Test]
+        public void CancelAfterCompleteReturnsToIdleWithAnEvent()
+        {
+            var calibrator = new FakeCalibrator();
+            calibrator.Complete(Profile);
+            List<string> events = Record(calibrator);
+
+            calibrator.Cancel();
+
+            Assert.That(events, Is.EqualTo(new[] { "StepChanged:Idle:Idle" }));
         }
 
         [Test]
@@ -108,15 +150,17 @@ namespace Bowling.Testing.Tests
         }
 
         [Test]
-        public void BeginAfterCompleteRestartsTheFlow()
+        public void BeginAfterCompleteRestartsTheFlowWithAnEvent()
         {
             var calibrator = new FakeCalibrator();
             calibrator.Complete(Profile);
+            List<string> events = Record(calibrator);
 
             calibrator.Begin();
 
             Assert.AreEqual(CalibrationStep.WaitingForFullBody, calibrator.Step);
             Assert.AreEqual(1, calibrator.BeginCount);
+            Assert.That(events, Is.EqualTo(new[] { "StepChanged:WaitingForFullBody:WaitingForFullBody" }));
         }
     }
 }

@@ -160,7 +160,7 @@ Settling:
    settleTimeout (4.0 s) after entering Settling → EndReason = Timeout → Done
 Any state: rollTimeout (10 s) after Roll() → EndReason = Timeout → Done
 Any state: WorldBounds violation by any body → log error, EndReason = Timeout → Done
-Done: evaluate standing pins → raise Milestone(Settled), then Completed(RollResult) → Idle
+Done: evaluate standing pins → enter Idle (IsRolling = false, Standing updated) → raise Milestone(Settled), then Completed(RollResult)
 ```
 
 **Ball in the pit:** 0.5 s after `EnteredPit`, the ball becomes kinematic and is deactivated, so it can't disturb the deck.

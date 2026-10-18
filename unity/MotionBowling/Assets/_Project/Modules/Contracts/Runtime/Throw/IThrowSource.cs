@@ -8,7 +8,7 @@ namespace Bowling.Contracts
         void Arm(in ThrowContext context);
         void Disarm();
         event Action<SwingPhase> PhaseChanged;
-        event Action<ThrowEvent> Thrown;               // fires once, then source returns to Disarmed
-        event Action<ThrowRejection> Rejected;         // swing aborted; source returns to WaitingForReady
+        event Action<ThrowEvent> Thrown;               // fires once; the source is already Disarmed when it fires
+        event Action<ThrowRejection> Rejected;         // swing aborted; the source is already back in WaitingForReady when it fires
     }
 }

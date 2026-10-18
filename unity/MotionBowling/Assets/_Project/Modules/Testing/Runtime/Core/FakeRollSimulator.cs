@@ -5,8 +5,8 @@ namespace Bowling.Testing
 {
     // An IRollSimulator a test drives by hand. The roll finishes only when a test calls CompleteWith.
     //
-    // CompleteWith raises Milestone(Settled) and then Completed while IsRolling is still true and Standing is
-    // still the old rack. Both change only after the events, so a handler can't call SetRack or Roll.
+    // State changes before events (ruling R21): Roll sets IsRolling before Milestone(Released), and
+    // CompleteWith sets Standing and IsRolling before Milestone(Settled) and Completed.
     public sealed class FakeRollSimulator : IRollSimulator
     {
         public PinMask Standing { get; private set; } = PinMask.All;
@@ -67,9 +67,9 @@ namespace Bowling.Testing
             Milestone?.Invoke(RollMilestone.Released);
         }
 
-        // Ends the roll: raises Milestone(Settled), then Completed with a result from the current
-        // Standing to standingAfter, then sets Standing = standingAfter and IsRolling = false.
-        // Throws InvalidOperationException unless a roll is in progress.
+        // Ends the roll. It sets Standing = standingAfter and IsRolling = false first, then raises
+        // Milestone(Settled), then Completed with a result from the old Standing to standingAfter. A handler
+        // may therefore call SetRack or Roll. Throws InvalidOperationException unless a roll is in progress.
         public void CompleteWith(PinMask standingAfter, bool gutter = false, RollEndReason reason = RollEndReason.Settled)
         {
             if (!IsRolling)
@@ -77,10 +77,11 @@ namespace Bowling.Testing
                 throw new InvalidOperationException("CompleteWith needs a roll in progress: call Roll first.");
             }
 
-            Milestone?.Invoke(RollMilestone.Settled);
-            Completed?.Invoke(new RollResult(Standing, standingAfter, gutter, reason));
+            PinMask before = Standing;
             Standing = standingAfter;
             IsRolling = false;
+            Milestone?.Invoke(RollMilestone.Settled);
+            Completed?.Invoke(new RollResult(before, standingAfter, gutter, reason));
         }
 
         // Raises an intermediate milestone (EnteredGutter, ReachedPins, EnteredPit). Changes no state.

@@ -78,7 +78,7 @@ ForwardSwing ──► Released   (first condition to hold; release time tR = th
    (b) forward peak:    vf has reached ≥ forwardMinSpeed and now < peakDropRatio (0.70) × max vf since ForwardSwing,
                         for 2 consecutive poses
 
-Released: compute features over the release window → ThrowEvent → raise Thrown → Disarmed
+Released: compute features over the release window → ThrowEvent → Disarmed (PhaseChanged) → raise Thrown
 
 Guards (checked every pose):
    Backswing or ForwardSwing lasting > swingTimeout (2.0 s) since Backswing entry → Rejected(SwingTimeout) → WaitingForReady

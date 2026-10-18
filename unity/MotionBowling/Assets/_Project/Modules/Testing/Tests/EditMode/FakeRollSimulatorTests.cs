@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace Bowling.Testing.Tests
 {
-    // Pinned semantics of FakeRollSimulator.
+    // Pinned semantics of FakeRollSimulator (ruling R21: state first, then events, so handlers may call back).
     public class FakeRollSimulatorTests
     {
         private static readonly ThrowEvent Throw =
@@ -127,7 +127,7 @@ namespace Bowling.Testing.Tests
         }
 
         [Test]
-        public void CompleteWithRaisesSettledThenCompletedThenUpdatesStateAfterBothEvents()
+        public void CompleteWithUpdatesStateThenRaisesSettledThenCompleted()
         {
             var simulator = new FakeRollSimulator();
             simulator.SetRack(SplitLeft);
@@ -138,11 +138,70 @@ namespace Bowling.Testing.Tests
 
             Assert.That(events, Is.EqualTo(new[]
             {
-                "Milestone:Settled:True:P7, P10",
-                "Completed:P7, P10>P10:True:P7, P10",
-            }), "both handlers see the old Standing and IsRolling == true");
+                "Milestone:Settled:False:P10",
+                "Completed:P7, P10>P10:False:P10",
+            }), "both handlers already see the new Standing and IsRolling == false, and the result still starts from the old rack");
             Assert.AreEqual(PinMask.P10, simulator.Standing);
             Assert.IsFalse(simulator.IsRolling);
+        }
+
+        [Test]
+        public void CompletedHandlerMayResetTheRackAndTheRackSticks()
+        {
+            var simulator = new FakeRollSimulator();
+            simulator.Completed += r => simulator.SetRack(PinMask.All);
+            simulator.Roll(Throw);
+
+            Assert.DoesNotThrow(() => simulator.CompleteWith(PinMask.None));
+
+            Assert.AreEqual(PinMask.All, simulator.Standing, "the handler's SetRack is not overwritten afterwards");
+            Assert.AreEqual(PinMask.All, simulator.LastRack);
+            Assert.AreEqual(1, simulator.SetRackCount);
+            Assert.IsFalse(simulator.IsRolling);
+        }
+
+        [Test]
+        public void CompletedHandlerMayRollAgainAndTheNewRollStaysInProgress()
+        {
+            var simulator = new FakeRollSimulator();
+            var results = new List<RollResult>();
+            simulator.Completed += r =>
+            {
+                results.Add(r);
+                if (results.Count == 1)
+                {
+                    simulator.Roll(Throw);
+                }
+            };
+            simulator.Roll(Throw);
+
+            Assert.DoesNotThrow(() => simulator.CompleteWith(SplitLeft));
+
+            Assert.IsTrue(simulator.IsRolling, "the second roll is not cancelled afterwards");
+            Assert.AreEqual(2, simulator.RollCount);
+            Assert.AreEqual(SplitLeft, simulator.Standing);
+
+            simulator.CompleteWith(PinMask.P10);
+
+            Assert.AreEqual(2, results.Count);
+            Assert.AreEqual(SplitLeft, results[1].StandingBefore);
+        }
+
+        [Test]
+        public void SettledMilestoneHandlerMayResetTheRack()
+        {
+            var simulator = new FakeRollSimulator();
+            simulator.Milestone += m =>
+            {
+                if (m == RollMilestone.Settled)
+                {
+                    simulator.SetRack(SplitLeft);
+                }
+            };
+            simulator.Roll(Throw);
+
+            Assert.DoesNotThrow(() => simulator.CompleteWith(PinMask.None));
+            Assert.AreEqual(SplitLeft, simulator.Standing);
         }
 
         [Test]

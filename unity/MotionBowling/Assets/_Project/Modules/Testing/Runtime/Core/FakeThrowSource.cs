@@ -4,7 +4,10 @@ using Bowling.Contracts;
 namespace Bowling.Testing
 {
     // An IThrowSource a test drives by hand. It starts Disarmed.
-    // Only SetPhase raises PhaseChanged. Arm, Disarm, EmitThrow and Reject move Phase silently.
+    //
+    // Every method sets Phase first and then raises events, so a handler sees the new phase and may call
+    // back into the source. Arm, Disarm, EmitThrow and Reject raise PhaseChanged only when the phase
+    // actually changes. SetPhase is an explicit test control and always raises.
     public sealed class FakeThrowSource : IThrowSource
     {
         public SwingPhase Phase { get; private set; } = SwingPhase.Disarmed;
@@ -26,13 +29,13 @@ namespace Bowling.Testing
         {
             LastContext = context;
             ArmCount++;
-            Phase = SwingPhase.WaitingForReady;
+            ChangePhase(SwingPhase.WaitingForReady);
         }
 
         public void Disarm()
         {
             DisarmCount++;
-            Phase = SwingPhase.Disarmed;
+            ChangePhase(SwingPhase.Disarmed);
         }
 
         // Sets the phase, then raises PhaseChanged. It raises even when the phase is unchanged.
@@ -42,8 +45,8 @@ namespace Bowling.Testing
             PhaseChanged?.Invoke(phase);
         }
 
-        // Raises Thrown while Phase is unchanged, then returns the source to Disarmed.
-        // Throws InvalidOperationException when the source is disarmed.
+        // Disarms (PhaseChanged if it was armed), then raises Thrown, so the source is already Disarmed when
+        // Thrown fires and a handler may re-arm it. Throws InvalidOperationException when disarmed.
         public void EmitThrow(ThrowEvent throwEvent)
         {
             if (Phase == SwingPhase.Disarmed)
@@ -51,15 +54,27 @@ namespace Bowling.Testing
                 throw new InvalidOperationException("EmitThrow needs an armed source: call Arm first.");
             }
 
+            ChangePhase(SwingPhase.Disarmed);
             Thrown?.Invoke(throwEvent);
-            Phase = SwingPhase.Disarmed;
         }
 
-        // Raises Rejected while Phase is unchanged, then returns the source to WaitingForReady.
+        // Returns to WaitingForReady (PhaseChanged if the phase changed), then raises Rejected, so the
+        // source is already waiting when Rejected fires.
         public void Reject(ThrowRejection reason)
         {
+            ChangePhase(SwingPhase.WaitingForReady);
             Rejected?.Invoke(reason);
-            Phase = SwingPhase.WaitingForReady;
+        }
+
+        private void ChangePhase(SwingPhase phase)
+        {
+            if (Phase == phase)
+            {
+                return;
+            }
+
+            Phase = phase;
+            PhaseChanged?.Invoke(phase);
         }
     }
 }

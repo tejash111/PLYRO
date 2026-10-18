@@ -22,13 +22,13 @@ namespace Bowling.Testing
 
         public event Action<RollOutcome> RollScored;
 
-        // Publishes a new snapshot that carries every field of the previous one except State, then raises
-        // StateChanged and SnapshotChanged, in that order. It raises even when the state is unchanged.
-        // The previous snapshot object is left untouched.
+        // Replaces Current with a new snapshot that carries every field of the previous one except State,
+        // then raises StateChanged and SnapshotChanged, in that order. It raises even when the state is
+        // unchanged (an explicit test control). The previous snapshot object is left untouched.
         public void SetState(GameState state)
         {
             GameSnapshot previous = Current;
-            Current = new GameSnapshot
+            GameSnapshot published = new GameSnapshot
             {
                 State = state,
                 Players = previous.Players,
@@ -38,11 +38,13 @@ namespace Bowling.Testing
                 FrameCount = previous.FrameCount,
                 Difficulty = previous.Difficulty,
             };
+            Current = published;
             StateChanged?.Invoke(state);
-            SnapshotChanged?.Invoke(Current);
+            SnapshotChanged?.Invoke(published);
         }
 
-        // Makes the snapshot Current and raises SnapshotChanged only, even when the state differs.
+        // Makes the snapshot Current, then raises StateChanged if its State differs from the previous
+        // snapshot's, then SnapshotChanged.
         public void Publish(GameSnapshot snapshot)
         {
             if (snapshot == null)
@@ -50,7 +52,13 @@ namespace Bowling.Testing
                 throw new ArgumentNullException(nameof(snapshot));
             }
 
+            GameState previousState = Current.State;
             Current = snapshot;
+            if (snapshot.State != previousState)
+            {
+                StateChanged?.Invoke(snapshot.State);
+            }
+
             SnapshotChanged?.Invoke(snapshot);
         }
 

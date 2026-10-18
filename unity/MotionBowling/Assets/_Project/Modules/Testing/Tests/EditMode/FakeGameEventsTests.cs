@@ -6,7 +6,8 @@ using NUnit.Framework;
 
 namespace Bowling.Testing.Tests
 {
-    // Pinned semantics of FakeGameEvents.
+    // Pinned semantics of FakeGameEvents (ruling R21: Current is replaced before any event is raised, and
+    // StateChanged fires on every actual state change).
     public class FakeGameEventsTests
     {
         private static GameSnapshot Snapshot()
@@ -110,7 +111,7 @@ namespace Bowling.Testing.Tests
         }
 
         [Test]
-        public void PublishReplacesCurrentAndRaisesOnlySnapshotChanged()
+        public void PublishReplacesCurrentThenRaisesStateChangedThenSnapshotChangedWhenTheStateDiffers()
         {
             var events = new FakeGameEvents();
             List<string> log = Record(events);
@@ -119,9 +120,26 @@ namespace Bowling.Testing.Tests
             events.Publish(snapshot);
 
             Assert.AreSame(snapshot, events.Current);
-            Assert.That(log, Is.EqualTo(new[] { "SnapshotChanged:AwaitThrow:True" }),
-                "Publish raises no StateChanged, even when the state differs");
+            Assert.That(log, Is.EqualTo(new[] { "StateChanged:AwaitThrow:AwaitThrow", "SnapshotChanged:AwaitThrow:True" }),
+                "Attract to AwaitThrow is a state change, so StateChanged fires first, with Current already replaced");
         }
+
+        [Test]
+        public void PublishRaisesOnlySnapshotChangedWhenTheStateIsUnchanged()
+        {
+            var events = new FakeGameEvents();
+            GameSnapshot first = Snapshot();
+            events.Publish(first);
+            List<string> log = Record(events);
+            GameSnapshot second = Snapshot();
+            second.CurrentFrame = 5;
+
+            events.Publish(second);
+
+            Assert.AreSame(second, events.Current);
+            Assert.That(log, Is.EqualTo(new[] { "SnapshotChanged:AwaitThrow:True" }));
+        }
+
 
         [Test]
         public void RaiseRollScoredForwardsTheOutcome()
