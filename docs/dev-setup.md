@@ -101,7 +101,7 @@ Step 3 judges the editor log, and Unity logs compiler output only for the assemb
 
 ### CI runner
 
-`.github/workflows/verify.yml` runs `bash tools/ci/verify.sh` on every push to `main` and on every pull request (a branch with an open pull request runs once, not twice), on a runner labelled `self-hosted`, `macOS` and `ARM64` (GitHub adds these labels to a self-hosted Apple Silicon Mac when you register it). The job times out after 90 minutes, and a newer run for the same ref (a new push to a branch or pull request) cancels the one still going. Afterwards it uploads `unity/MotionBowling/Logs/ci/` as the artifact `unity-ci-logs`, also when verify failed.
+`.github/workflows/verify.yml` runs `bash tools/ci/verify.sh` on every push to `main` and on every pull request (a branch with an open pull request runs once, not twice), on a runner labelled `self-hosted`, `macOS` and `ARM64` (GitHub adds these labels to a self-hosted Apple Silicon Mac when you register it). The job times out after 90 minutes, and on a pull request a newer push cancels the run still going. A run on `main` is never cancelled once it has started, though GitHub keeps only the newest run waiting behind it, so a commit pushed in between can go without its own run. Afterwards it uploads `unity/MotionBowling/Logs/ci/` as the artifact `unity-ci-logs`, also when verify failed.
 
 Set up the runner machine once, as the user that runs the GitHub Actions runner service:
 

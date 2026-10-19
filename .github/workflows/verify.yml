@@ -9,11 +9,13 @@ on:
     branches: [main]
   pull_request:
 
-# One run per ref: a newer push to the same branch or pull request cancels the run that is still going,
-# which matters because every run holds the one Unity editor of the self-hosted runner for minutes.
+# One run per ref. On a pull request a newer push cancels the run that is still going, which matters
+# because every run holds the one Unity editor of the self-hosted runner for minutes. A run on main is
+# never cancelled once it has started, so each verdict on main is complete (GitHub still keeps only the
+# newest waiting run of a group).
 concurrency:
   group: verify-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # The job only reads the repository. This also limits what the token can do if a workflow run is abused.
 permissions:
