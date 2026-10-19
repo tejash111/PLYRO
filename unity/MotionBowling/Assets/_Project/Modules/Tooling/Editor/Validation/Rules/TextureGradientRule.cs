@@ -9,10 +9,12 @@ using UnityEngine;
 namespace Bowling.Tooling.Editor
 {
     /// <summary>
-    /// G-6 (foundation spec, section 8.1): a color texture anywhere under <c>Assets/_Project</c> except the Tooling
-    /// module (the context's <see cref="ValidationContext.DefaultTextureSearchRoots"/>, or the folders named in
+    /// G-6 (foundation spec, section 8.1): a color texture in the scanned folders (the context's
+    /// <see cref="ValidationContext.DefaultTextureSearchRoots"/>, all of <c>Assets/_Project</c>, or the folders named in
     /// <see cref="ValidationContext.TextureSearchRoots"/>) may not hold a smooth ramp, judged by
-    /// <see cref="GradientHeuristic"/> with the thresholds of <see cref="GradientHeuristicSettings"/>.
+    /// <see cref="GradientHeuristic"/> with the thresholds of <see cref="GradientHeuristicSettings"/>. The Tooling module is
+    /// left out, and so is a texture in a module's <c>Tests/</c> folder that nothing outside those folders uses and that
+    /// is not in a <c>Resources</c> folder (test data).
     /// <para>
     /// The rule reads the source PNG bytes, so any other color-texture file fails with "convert to PNG", a texture
     /// saved as a native <c>.asset</c> (<c>Texture2D</c>, <c>Cubemap</c>, <c>Texture2DArray</c>) included. Normal maps,
@@ -35,8 +37,14 @@ namespace Bowling.Tooling.Editor
             int maxStep = settings != null ? settings.MaxStep : GradientHeuristicSettings.DefaultMaxStep;
             float maxFraction = settings != null ? settings.MaxFraction : GradientHeuristicSettings.DefaultMaxFraction;
 
+            HashSet<string> usedOutsideTests = null;
             foreach (string path in ScanScope.AssetPaths("t:Texture", roots).Where(p => !ScanScope.IsVendor(p) && !ScanScope.IsTooling(p)))
             {
+                if (ScanScope.IsModuleTests(path) && !path.Contains("/Resources/"))
+                {
+                    usedOutsideTests ??= DependenciesOutsideModuleTests();
+                    if (!usedOutsideTests.Contains(path)) continue;
+                }
                 if (!IsColorTextureFile(path)) continue;
 
                 if (!path.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
@@ -45,6 +53,18 @@ namespace Bowling.Tooling.Editor
                     CheckPng(context, path, maxStep, maxFraction, violations);
             }
             return violations;
+        }
+
+        // A texture in a module's Tests/ folder is test data, such as an image a test reads, and is skipped (ruling R30),
+        // unless it can ship: it sits in a Resources folder, or an asset outside the module test folders depends on it.
+        // These are the assets such a texture would ship through: every dependency, direct or not, of every asset
+        // under Assets/ outside the module test folders. Built only when a Tests/ texture turns up.
+        static HashSet<string> DependenciesOutsideModuleTests()
+        {
+            string[] referrers = AssetDatabase.GetAllAssetPaths()
+                .Where(p => p.StartsWith("Assets/", StringComparison.Ordinal) && !ScanScope.IsModuleTests(p) && !AssetDatabase.IsValidFolder(p))
+                .ToArray();
+            return new HashSet<string>(AssetDatabase.GetDependencies(referrers, true), StringComparer.Ordinal);
         }
 
         // The folders to scan. An explicit folder that is missing is a violation; a missing default is skipped

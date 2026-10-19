@@ -57,7 +57,7 @@ namespace Bowling.Tooling.Editor
 
         /// <summary>
         /// The folders G-6 scans when <see cref="TextureSearchRoots"/> is <c>null</c>: the folder of the spec,
-        /// <c>Assets/_Project</c> (Tooling and vendor folders are filtered out). A default folder that does not exist
+        /// <c>Assets/_Project</c> (Tooling, module test and vendor folders are filtered out). A default folder that does not exist
         /// is skipped silently (ruling R16); a test sets a missing one to show that.
         /// </summary>
         public string[] DefaultTextureSearchRoots = { "Assets/_Project" };

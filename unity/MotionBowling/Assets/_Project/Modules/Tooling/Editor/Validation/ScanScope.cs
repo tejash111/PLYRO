@@ -1,13 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using UnityEditor;
 
 namespace Bowling.Tooling.Editor
 {
     /// <summary>
-    /// Where the asset-level rules look (foundation spec, section 8): the folder they search, and the vendor
-    /// and Tooling folders they leave out.
+    /// Where the asset-level rules look (foundation spec, section 8): the folder they search, and the vendor,
+    /// Tooling and module test folders they leave out.
     /// </summary>
     internal static class ScanScope
     {
@@ -15,11 +16,19 @@ namespace Bowling.Tooling.Editor
         const string ToolingFolder = "Assets/_Project/Modules/Tooling/";
         const string ProjectFolder = "Assets/_Project";
 
+        static readonly Regex ModuleTestsFolder = new Regex("^Assets/_Project/Modules/[^/]+/Tests/");
+
         /// <summary>Vendor assets are not ours to judge.</summary>
         public static bool IsVendor(string assetPath) => assetPath.StartsWith(FmodFolder, StringComparison.Ordinal);
 
         /// <summary>The Tooling module holds the banned patterns as data, so it is not scanned.</summary>
         public static bool IsTooling(string assetPath) => assetPath.StartsWith(ToolingFolder, StringComparison.Ordinal);
+
+        /// <summary>
+        /// A module's test folder, <c>Modules/&lt;Module&gt;/Tests/</c>, which holds test data such as the images a test
+        /// reads; G-6 leaves such a texture out unless it can ship (ruling R30). A folder named <c>Tests</c> anywhere else is not one.
+        /// </summary>
+        public static bool IsModuleTests(string assetPath) => ModuleTestsFolder.IsMatch(assetPath);
 
         /// <summary>The folder G-4 searches: <see cref="ValidationContext.AssetSearchRoot"/>.</summary>
         public static string SearchRoot(ValidationContext context) => context.AssetSearchRoot.Replace('\\', '/').TrimEnd('/');

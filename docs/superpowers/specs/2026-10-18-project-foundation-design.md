@@ -270,6 +270,7 @@ Two layers share one rule set:
 - Each rule's row says what it scans. The default is `Assets/_Project/**`. G-1 scans `.uss`/`.uxml` anywhere under `Assets/`, and M-8's colour-literal check scans `.uss` anywhere under `Assets/`. G-2 and M-6 scan `.cs` anywhere under `Assets/`. G-4 scans every volume profile under `Assets/`.
 - Excluded from every rule: vendor folders (`Assets/Plugins/FMOD/**`, `Packages/**`) and `tools/checks/**`.
 - Excluded from the G rules only: `Assets/_Project/Modules/Tooling/**`, because it contains the banned patterns as data. G-4 is the one exception: it judges every volume profile outside vendor folders, Tooling included, since Tooling holds none. The M rules judge Tooling like any other module.
+- Excluded from G-6 only: textures in the module test folders `Assets/_Project/Modules/<Module>/Tests/**` that can't ship (see the G-6 row), so a test's image fixture can't trip it.
 
 ### 8.1 SOT-1 rules (no gradients)
 
@@ -281,7 +282,7 @@ Two layers share one rule set:
 | G-3b | text | Any `.shader`/`.hlsl`/`.shadergraph` under `_Project` that isn't listed in `tools/checks/reviewed-shaders.txt` (format: `<path> # reviewed by <name> on <date>: <why gradient-free>`) |
 | G-4 | editor | Every `VolumeProfile` asset under `Assets/` (vendor folders excluded): an active `Vignette`, `ScreenSpaceLensFlare`, `FilmGrain` or `Bloom` (Q-3 default) whose intensity is overridden and above 0 (URP ignores parameters that aren't overridden). Unity 6's default profile may carry overrides at zero intensity (6.3's is empty), so zero-intensity overrides pass. |
 | G-5 | editor | Every scene in the build plus every prefab under `_Project`: `RenderSettings.ambientMode` not `Flat`; fog on; skybox not null; any `Camera.clearFlags == Skybox`; any `LineRenderer`/`TrailRenderer` whose `colorGradient` is not one flat color (its color keys hold more than one distinct color, or its alpha keys more than one distinct alpha; Unity stores a one-key gradient as two equal keys) |
-| G-6 | editor | Every color `Texture2D`/`Sprite` under `Assets/_Project/**` (Tooling and vendor folders excluded). Skipped: normal maps, non-sRGB data textures, lightmaps. Fails when more than 2% of opaque pixels differ from a fully opaque 4-neighbour by a small non-zero step (0 < Δ ≤ 3/255 on any channel), which is the signature of a smooth ramp. Thresholds live in `Tooling/Editor/Config/GradientHeuristic.asset`. The check reads the source PNG bytes, so any other color-texture format in the scanned folders fails G-6 with "convert to PNG". |
+| G-6 | editor | Every color `Texture2D`/`Sprite` under `Assets/_Project/**` (Tooling and vendor folders excluded). A texture in a module test folder `Assets/_Project/Modules/<Module>/Tests/**` is test data, such as an image a test reads, and is skipped, unless it can ship: it is in a `Resources` folder, or an asset outside the module test folders depends on it (directly or not). A folder named `Tests` anywhere else is judged. Skipped: normal maps, non-sRGB data textures, lightmaps. Fails when more than 2% of opaque pixels differ from a fully opaque 4-neighbour by a small non-zero step (0 < Δ ≤ 3/255 on any channel), which is the signature of a smooth ramp. Thresholds live in `Tooling/Editor/Config/GradientHeuristic.asset`. The check reads the source PNG bytes, so any other color-texture format in the scanned folders fails G-6 with "convert to PNG". |
 
 ### 8.2 SOT-2 rules (modular structure)
 
@@ -387,6 +388,7 @@ These rulings were made while the plan ran, and the sections above already refle
   - M-6 skips a `.cs` inside a folder whose name ends in `~` (such as `Samples~/` or `Documentation~/`): Unity doesn't import those folders, so the code is never compiled.
   - G-2 also catches `new global::UnityEngine.Gradient(`, and a target-typed `new(` that initializes a `Gradient` property (`{ get; } = new()`), is the expression body of a `Gradient` property or method (`=> new()`), or is its getter (`{ get => new(); }`). The explicit `{ get; } = new Gradient()` was already caught.
   - The scan-scope paragraph names M-8's scope again (its colour-literal check reads `.uss` anywhere under `Assets/`), which the R25 rewrite had dropped.
+  - G-6 skips a texture in a module test folder `Modules/<Module>/Tests/**`, so an image fixture a test reads can't false-positive, but only while it can't ship: one in a `Resources` folder, or one that an asset outside the test folders depends on, is judged. Only a module's own `Tests/` folder counts, not any folder named `Tests`.
 
 ## 13. Decisions made here (Claude's calls, please check)
 
