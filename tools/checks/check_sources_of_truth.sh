@@ -30,6 +30,9 @@ REPO="$(cd "$CHECKS_DIR/../.." && pwd)"
 UNITY_ASSETS="unity/MotionBowling/Assets"
 # The file types the rules look at. Staged mode only copies these out of the index.
 SCANNED_EXTENSIONS="cs uss uxml shader hlsl shadergraph shadersubgraph"
+# File types no rule reads, but whose staged change touches their folder (touched_files): an .asmdef
+# decides M-6 for the code below it.
+FOLDER_EXTENSIONS="asmdef"
 
 die() {
   echo "check_sources_of_truth.sh: $*" >&2
@@ -129,8 +132,12 @@ snapshot_staged() {
     set -- "$@" "$UNITY_ASSETS/*.$ext"
   done
   git diff --cached --name-only -z --diff-filter=ACMR -- "$@" > "$TMP/staged.list" || die "git diff failed"
-  # Every staged change to such a file, deletions and the old side of a rename included. A folder
-  # rule (M-8) has to look again at a folder that lost a file; touched_files reads this list.
+  # Every staged change to such a file or to a FOLDER_EXTENSIONS file, deletions and the old side of
+  # a rename included. A folder rule has to look again at a folder that lost a file (M-8) or its
+  # asmdef (M-6); touched_files reads this list.
+  for ext in $FOLDER_EXTENSIONS; do
+    set -- "$@" "$UNITY_ASSETS/*.$ext"
+  done
   git diff --cached --name-only -z --no-renames -- "$@" > "$TMP/touched.list" || die "git diff failed"
   [ -s "$TMP/staged.list" ] || [ -s "$TMP/touched.list" ] || exit 0
   ROOT="$TMP/snapshot/$UNITY_ASSETS"
@@ -221,7 +228,8 @@ tree_files() {
 }
 
 # touched_files <folder>: the files in the folder that this run is about. Outside staged mode that
-# is every file; in staged mode it is every file with a staged change of any kind (see snapshot_staged).
+# is every file; in staged mode it is every scanned or FOLDER_EXTENSIONS file with a staged change of
+# any kind (see snapshot_staged).
 touched_files() {
   if [ "$MODE" = staged ]; then
     tr '\0' '\n' < "$TMP/touched.list" | sed "s|^$UNITY_ASSETS/||" | awk -v p="$1/" 'index($0, p) == 1' | drop_excluded

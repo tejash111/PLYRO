@@ -212,9 +212,9 @@ rule_M_5() {
 # into the default Assembly-CSharp). The asmdef decides, not the folder name; where an asmdef may sit
 # is M-1's job. Tooling counts as a module. FMOD (vendor) is not listed at all, and a .cs in a folder
 # whose name ends in ~ is skipped: Unity doesn't import such folders (Samples~/, Documentation~/).
-# The asmdefs come from tree_files, so in staged mode an asmdef counts when it is in the index. Staged
-# mode judges only the staged .cs files, so staging just the deletion of an asmdef is not seen here;
-# --all (verify.sh step 1) and the editor rule M-1 report it.
+# The asmdefs come from tree_files, so in staged mode an asmdef counts when it is in the index. Besides
+# the listed .cs, M-6 judges every .cs from tree_files below a folder whose asmdef touched_files has:
+# in staged mode that catches an asmdef deleted or moved on its own, with its code left behind.
 # ---------------------------------------------------------------------------------------------
 IFS= read -r -d '' AWK_M6 <<'EOF' || true
 BEGIN { while ((getline d < dirs) > 0) asmdef_dir[d] = 1 }
@@ -226,12 +226,29 @@ index($0, "~/") > 0 { next }
 }
 EOF
 
+# The .cs files (one path per line on stdin) below one of the folders listed in the file "dirs".
+IFS= read -r -d '' AWK_M6_BELOW <<'EOF' || true
+BEGIN { while ((getline d < dirs) > 0) dir[d] = 1 }
+/[.]cs$/ {
+  d = $0
+  while (sub(/\/[^\/]*$/, "", d)) if (d in dir) { print; next }
+}
+EOF
+
+# m6_asmdef_dirs: from paths on stdin, the folders inside Modules/<Module>/ that hold an .asmdef.
+m6_asmdef_dirs() {
+  sed -n -E 's#^(_Project/Modules/[^/]+(/.*)?)/[^/]+[.]asmdef$#\1#p' | sort -u
+}
+
 rule_M_6() {
   local files
   files="$(tree_files _Project/Modules)" || return 1
-  printf '%s\n' "$files" | sed -n -E 's#^(_Project/Modules/[^/]+(/.*)?)/[^/]+[.]asmdef$#\1#p' \
-    | sort -u > "$TMP/m6-asmdef-dirs.txt"
-  list_files assets cs | awk -v dirs="$TMP/m6-asmdef-dirs.txt" "$AWK_M6"
+  printf '%s\n' "$files" | m6_asmdef_dirs > "$TMP/m6-asmdef-dirs.txt"
+  touched_files _Project/Modules | m6_asmdef_dirs > "$TMP/m6-touched-dirs.txt"
+  {
+    list_files assets cs
+    printf '%s\n' "$files" | awk -v dirs="$TMP/m6-touched-dirs.txt" "$AWK_M6_BELOW"
+  } | sort -u | awk -v dirs="$TMP/m6-asmdef-dirs.txt" "$AWK_M6"
 }
 
 # ---------------------------------------------------------------------------------------------

@@ -1205,6 +1205,43 @@ assert_exit 1 in_dir "$AS" "$CHECK" --staged
 assert_output_contains "M-6 Assets/_Project/Modules/Gameplay/Editor/Menu.cs " in_dir "$AS" "$CHECK" --staged
 git -C "$AS" add -A
 assert_exit 0 in_dir "$AS" "$CHECK" --staged
+# Staged (ruling R31): a staged asmdef change touches its folder, so M-6 also judges every .cs in the
+# index below it. Deleting the asmdef on its own, with the code unchanged, strands that code.
+AD="$SPACED/asmdef deleted repo"
+GPR="$UNITY/Modules/Gameplay/Runtime"
+GPR_MSG="Assets/_Project/Modules/Gameplay/Runtime"
+new_repo "$AD"
+put "$AD" "$GPR/Bowling.Gameplay.asmdef" '{ "name": "Bowling.Gameplay" }'
+put "$AD" "$GPR/Lane.cs" 'public class Lane { }'
+put "$AD" "$GPR/Deep Core/Pins.cs" 'public class Pins { }'
+put "$AD" "$GPR/Sub/Bowling.Gameplay.Sub.asmdef" '{ "name": "Bowling.Gameplay.Sub" }'
+put "$AD" "$GPR/Sub/Kept.cs" 'public class Kept { }'
+put "$AD" "$GPR/Samples~/Sample.cs" 'public class Sample { }'
+git -C "$AD" add -A
+git -C "$AD" commit -q -m init
+git -C "$AD" rm -q "$GPR/Bowling.Gameplay.asmdef"
+assert_exit 1 in_dir "$AD" "$CHECK" --staged
+assert_output_contains "M-6 $GPR_MSG/Lane.cs " in_dir "$AD" "$CHECK" --staged
+assert_output_contains "M-6 $GPR_MSG/Deep Core/Pins.cs " in_dir "$AD" "$CHECK" --staged
+# A folder below with its own asmdef, and a folder Unity doesn't import, stay quiet.
+assert_exit 0 output_lacks "Kept.cs" in_dir "$AD" "$CHECK" --staged
+assert_exit 0 output_lacks "Sample.cs" in_dir "$AD" "$CHECK" --staged
+# Moving the asmdef to another folder (git sees a delete and an add) strands the code too.
+git -C "$AD" reset -q --hard
+mkdir -p "$AD/$UNITY/Modules/Gameplay/Other"
+git -C "$AD" mv "$GPR/Bowling.Gameplay.asmdef" "$UNITY/Modules/Gameplay/Other/Bowling.Gameplay.asmdef"
+assert_exit 1 in_dir "$AD" "$CHECK" --staged
+assert_output_contains "M-6 $GPR_MSG/Lane.cs " in_dir "$AD" "$CHECK" --staged
+# Editing the asmdef, or deleting the whole folder with its code, passes quietly.
+git -C "$AD" reset -q --hard
+put "$AD" "$GPR/Bowling.Gameplay.asmdef" '{ "name": "Bowling.Gameplay", "autoReferenced": false }'
+git -C "$AD" add -A
+assert_exit 0 in_dir "$AD" "$CHECK" --staged
+assert_exit 0 prints_nothing in_dir "$AD" "$CHECK" --staged
+git -C "$AD" reset -q --hard
+git -C "$AD" rm -r -q "$GPR"
+assert_exit 0 in_dir "$AD" "$CHECK" --staged
+assert_exit 0 prints_nothing in_dir "$AD" "$CHECK" --staged
 # A long file: 301 lines only warn (exit 0), 401 fail.
 LONG="$SPACED/long repo"
 new_repo "$LONG"
