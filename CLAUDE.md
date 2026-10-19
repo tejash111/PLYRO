@@ -82,5 +82,7 @@ A new module needs all of these, in one change:
 - **Units:** SI everywhere (metres, seconds, kilograms, radians unless the name says `Deg`). Lane frame: origin at the center of the foul line, +Z down the lane, +X to the bowler's right, +Y up.
 - **Tuning values** live in ScriptableObject assets under `Assets/_Project/Config/`, never as magic numbers in code.
 - **Privacy:** camera images are never written to disk or sent anywhere.
-- **Unity tests from the CLI** (editor path from Unity Hub, version from `unity/MotionBowling/ProjectSettings/ProjectVersion.txt`):
-  `"/Applications/Unity/Hub/Editor/<version>/Unity.app/Contents/MacOS/Unity" -batchmode -projectPath unity/MotionBowling -runTests -testPlatform EditMode -testResults /tmp/editmode.xml`
+- **Install the pre-commit hook once per clone:** `bash tools/checks/install-hooks.sh`.
+- **Check the dev machine:** `bash tools/dev/check-env.sh` (setup steps are in `docs/dev-setup.md`).
+- **Run Unity tests:** `tools/ci/run_unity_tests.sh <EditMode|PlayMode> [assemblyNames]`. It runs headless and judges the NUnit XML, so it prints `PASS total=N` or `FAIL …`. Never call the Unity binary directly: `tools/ci/unity.sh` resolves the pinned editor.
+- **Before claiming work is done:** `bash tools/ci/verify.sh` (all gates and tests; prints `VERIFY OK`).
