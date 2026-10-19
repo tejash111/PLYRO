@@ -292,7 +292,7 @@ Two layers share one rule set:
 | M-3 | text | More than one public top-level type in a `.cs` file; file name ≠ public type name |
 | M-4 | text | A `.cs` file over 400 lines (fail) or over 300 lines (warning only) |
 | M-5 | text | In runtime `.cs` outside `Modules/App/`: `FindObjectOfType`, `FindFirstObjectByType`, `FindAnyObjectByType`, `GameObject.Find`, `Resources.Load`, and `static <Type> Instance` singleton properties |
-| M-6 | text | A `.cs` file anywhere under `Assets/` (vendor folders excluded) that isn't inside a module asmdef folder: `Assets/_Project/Modules/<Module>/Runtime/`, `Editor/`, `Tests/EditMode/` or `Tests/PlayMode/`. So `Assets/Scripts/Foo.cs` fails, and so does `Modules/Gameplay/Foo/Bar.cs` |
+| M-6 | text | A `.cs` file anywhere under `Assets/` (vendor folders excluded) that isn't inside a module asmdef folder: a folder inside `Assets/_Project/Modules/<Module>/` that holds an `.asmdef`, or a folder below it. The asmdef decides, not the folder name (where an asmdef may sit is M-1's job). So `Assets/Scripts/Foo.cs` fails, `Modules/Gameplay/Foo/Bar.cs` fails when neither `Foo/` nor `Gameplay/` holds an asmdef, and `Modules/Gameplay/Runtime/Foo.cs` fails when `Runtime/` holds none |
 | M-7 | editor | A root object in `Main.unity` that's neither a prefab instance root nor named `Bootstrap` |
 | M-8 | text | A UI component folder `UI/Runtime/Components/<Name>/` missing `<Name>.uxml`, `<Name>.uss` or `<Name>.cs`; a color literal (`#hex`, `rgb(`, `rgba(`) in any `.uss` other than `UI/Runtime/Styles/Tokens.uss` |
 
@@ -382,6 +382,8 @@ These rulings were made while the plan ran, and the sections above already refle
 - **R25:** the text-rule holes are closed. M-6 covers every `.cs` under `Assets/`, G-2 scans all of `Assets/` and bans more patterns, G-1 rejects a `var()` blur in `text-shadow`, Tooling is excluded from the G rules only, G-6 scans all of `_Project`, and M-1 rejects `.asmref` files in `Modules/` and `.asmdef` files outside it (section 8).
 - **R26:** the results gate also fails on any inconclusive test (section 9).
 - **R29:** G-1 judges a `text-shadow` that has `var(` by its literal length count, not by where the `var(` sits: fewer than three literal lengths fails, and with three the third is the blur. This closes a colour-first value with a `var()` blur (`black 1px 1px var(--blur)`) and stops flagging `var(--c) 2px 2px 0` (section 8.1).
+- **R30:** the final review's minors are fixed (section 8):
+  - M-6 judges a module asmdef folder by the `.asmdef` in it, not by its name: a `.cs` in `Modules/<Module>/Runtime/` with no asmdef there fails, because Unity would compile it into `Assembly-CSharp`.
 
 ## 13. Decisions made here (Claude's calls, please check)
 

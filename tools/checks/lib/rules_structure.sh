@@ -207,14 +207,27 @@ rule_M_5() {
 }
 
 # ---------------------------------------------------------------------------------------------
-# M-6: every .cs file under Assets/ is inside a module asmdef folder: Modules/<Module>/Runtime/,
-# Editor/, Tests/EditMode/ or Tests/PlayMode/ (a .cs anywhere else would compile into the default
-# Assembly-CSharp). Tooling counts as a module. FMOD (vendor) is not listed at all.
+# M-6: every .cs file under Assets/ is inside a module asmdef folder: a folder inside
+# Modules/<Module>/ that holds an .asmdef, or a folder below one (a .cs anywhere else would compile
+# into the default Assembly-CSharp). The asmdef decides, not the folder name; where an asmdef may sit
+# is M-1's job. Tooling counts as a module. FMOD (vendor) is not listed at all.
+# The asmdefs come from tree_files, so in staged mode an asmdef counts when it is in the index.
 # ---------------------------------------------------------------------------------------------
+IFS= read -r -d '' AWK_M6 <<'EOF' || true
+BEGIN { while ((getline d < dirs) > 0) asmdef_dir[d] = 1 }
+{
+  d = $0
+  while (sub(/\/[^\/]*$/, "", d)) if (d in asmdef_dir) next
+  print "M-6 Assets/" $0 " code must live in a module asmdef folder (a folder in Assets/_Project/Modules/<Module>/ with an .asmdef, or below one): move it next to the module's asmdef in Runtime/, Editor/, Tests/EditMode/ or Tests/PlayMode/"
+}
+EOF
+
 rule_M_6() {
-  list_files assets cs \
-    | grep -v -E '^_Project/Modules/[^/]+/(Runtime|Editor|Tests/(EditMode|PlayMode))/' \
-    | sed 's|^.*$|M-6 Assets/& code must live in a module asmdef folder: move it under Assets/_Project/Modules/<Module>/{Runtime,Editor,Tests/EditMode,Tests/PlayMode}/|'
+  local files
+  files="$(tree_files _Project/Modules)" || return 1
+  printf '%s\n' "$files" | sed -n -E 's#^(_Project/Modules/[^/]+(/.*)?)/[^/]+[.]asmdef$#\1#p' \
+    | sort -u > "$TMP/m6-asmdef-dirs.txt"
+  list_files assets cs | awk -v dirs="$TMP/m6-asmdef-dirs.txt" "$AWK_M6"
 }
 
 # ---------------------------------------------------------------------------------------------

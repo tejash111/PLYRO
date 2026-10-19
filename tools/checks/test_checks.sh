@@ -588,6 +588,7 @@ gen_assets "$M4/l400" "$BIG" 400
 assert_exit 0 "$CHECK" --root "$M4/l400/Assets" --rules M-4
 assert_output_contains "WARN M-4 Assets/$BIG 400 lines (soft limit 300)" "$CHECK" --root "$M4/l400/Assets" --rules M-4
 gen_assets "$M4/l301" "$BIG" 301
+mk_files "$M4/l301" "_Project/Modules/Gameplay/Runtime/Bowling.Gameplay.asmdef"
 assert_exit 0 "$CHECK" --root "$M4/l301/Assets" --rules M-4
 assert_output_contains "WARN M-4 Assets/$BIG 301 lines (soft limit 300)" "$CHECK" --root "$M4/l301/Assets" --rules M-4
 gen_assets "$M4/l300" "$BIG" 300
@@ -694,18 +695,31 @@ Scripts/T.cs
 EOF
 assert_exit 0 run_one M-5 Modules/Gameplay/Runtime/T.uss "$FIND"
 
-# M-6: every .cs under Assets is inside a module asmdef folder: Modules/<M>/Runtime, Editor,
-# Tests/EditMode or Tests/PlayMode (Tooling too). Only Plugins/FMOD (vendor) is exempt.
+# M-6: every .cs under Assets is inside a module asmdef folder: a folder inside Modules/<M>/ that holds an
+# .asmdef, or a folder below one. The asmdef decides, not the folder name (ruling R30). Tooling counts as
+# a module. Only Plugins/FMOD (vendor) is exempt.
 M6F="$FIXTURES/fail/M-6/Assets"
 assert_output_contains "M-6 Assets/_Project/Scripts/Loose.cs " "$CHECK" --root "$M6F" --rules M-6
 assert_output_contains "M-6 Assets/Scripts/Loose.cs " "$CHECK" --root "$M6F" --rules M-6
 assert_output_contains "M-6 Assets/_Project/Modules/Gameplay/Foo/Bar.cs " "$CHECK" --root "$M6F" --rules M-6
 assert_output_contains "M-6 Assets/_Project/Modules/Tooling/Loose.cs " "$CHECK" --root "$M6F" --rules M-6
+assert_output_contains "M-6 Assets/_Project/Modules/Contracts/Runtime/Orphan.cs " "$CHECK" --root "$M6F" --rules M-6
 assert_output_contains "module asmdef folder" "$CHECK" --root "$M6F" --rules M-6
-M6="public class T { }"
-while IFS= read -r p; do
-  assert_exit 1 run_at M-6 "$p" "$M6"
-done <<'EOF'
+
+# m6 <path below Assets>...: run M-6 on an Assets folder that holds these files and nothing else. Each
+# line below is one case: a file, then the asmdefs (or other files) around it.
+m6() {
+  local dir
+  dir="$(mktemp -d "$WORK/m6.XXXXXX")"
+  mk_files "$dir" "$@"
+  "$CHECK" --root "$dir/Assets" --rules M-6 < /dev/null
+}
+GP="_Project/Modules/Gameplay"
+TL="_Project/Modules/Tooling"
+while IFS= read -r files; do
+  # shellcheck disable=SC2086 # one case per line, its paths split on spaces
+  assert_exit 1 m6 $files
+done <<EOF
 T.cs
 Scripts/T.cs
 Scripts/Deep/Down/T.cs
@@ -718,36 +732,54 @@ _Project/T.cs
 _Project/Scripts/T.cs
 _Project/Scripts/Deep/Down/T.cs
 _Project/Modules/T.cs
-_Project/Modules/Gameplay/T.cs
-_Project/Modules/Gameplay/Foo/T.cs
-_Project/Modules/Gameplay/Foo/Runtime/T.cs
-_Project/Modules/Gameplay/Config/T.cs
-_Project/Modules/Gameplay/Tests/T.cs
-_Project/Modules/Gameplay/Tests/Other/T.cs
-_Project/Modules/Gameplay/runtime/T.cs
-_Project/Modules/Tooling/T.cs
-_Project/Modules/Tooling/Config/T.cs
+$GP/T.cs
+$GP/Foo/T.cs
+$GP/Foo/Runtime/T.cs
+$GP/Config/T.cs
+$GP/Tests/T.cs
+$GP/Tests/Other/T.cs
+$GP/runtime/T.cs
+$TL/T.cs
+$TL/Config/T.cs
+$GP/Runtime/T.cs
+$GP/Editor/T.cs
+$GP/Tests/EditMode/T.cs
+$TL/Editor/T.cs
+$GP/Runtime/T.cs $GP/Editor/Bowling.Gameplay.Editor.asmdef
+$GP/Runtime/T.cs $GP/Runtime/Core/Bowling.Gameplay.Core.asmdef
+$GP/Runtime/T.cs $GP/Runtime/Extra.asmref
+$GP/Runtime/T.cs $GP/Runtime/Bowling.Gameplay.asmdef.meta
+$GP/Runtime2/T.cs $GP/Runtime/Bowling.Gameplay.asmdef
+$GP/Runtime/T.cs _Project/Modules/Bowling.Loose.asmdef
+$GP/Runtime/T.cs _Project/Bowling.Project.asmdef
+$GP/Runtime/T.cs Bowling.Everything.asmdef
+Scripts/T.cs Scripts/Bowling.Rogue.asmdef
+_Project/Scripts/T.cs _Project/Scripts/Bowling.Rogue.asmdef
 EOF
-while IFS= read -r p; do
-  assert_exit 0 run_at M-6 "$p" "$M6"
-done <<'EOF'
-_Project/Modules/Gameplay/Runtime/T.cs
-_Project/Modules/Gameplay/Runtime/Core/Deep/T.cs
-_Project/Modules/Gameplay/Editor/T.cs
-_Project/Modules/Gameplay/Editor/Setup/T.cs
-_Project/Modules/Gameplay/Tests/EditMode/T.cs
-_Project/Modules/Gameplay/Tests/PlayMode/Sub/T.cs
-_Project/Modules/Tooling/Editor/T.cs
-_Project/Modules/Tooling/Editor/Validation/Rules/T.cs
-_Project/Modules/Tooling/Tests/EditMode/T.cs
-_Project/Modules/App/Runtime/T.cs
-_Project/Modules/App/Editor/T.cs
+while IFS= read -r files; do
+  # shellcheck disable=SC2086 # one case per line, its paths split on spaces
+  assert_exit 0 m6 $files
+done <<EOF
+$GP/Runtime/T.cs $GP/Runtime/Bowling.Gameplay.asmdef
+$GP/Runtime/Core/Deep/T.cs $GP/Runtime/Bowling.Gameplay.asmdef
+$GP/Editor/T.cs $GP/Editor/Bowling.Gameplay.Editor.asmdef
+$GP/Editor/Setup/T.cs $GP/Editor/Bowling.Gameplay.Editor.asmdef
+$GP/Tests/EditMode/T.cs $GP/Tests/EditMode/Bowling.Gameplay.Tests.EditMode.asmdef
+$GP/Tests/PlayMode/Sub/T.cs $GP/Tests/PlayMode/Bowling.Gameplay.Tests.PlayMode.asmdef
+$GP/Runtime/T.cs $GP/Runtime/Bowling.Gameplay.asmdef $GP/Editor/Bowling.Gameplay.Editor.asmdef
+$TL/Editor/T.cs $TL/Editor/Bowling.Tooling.Editor.asmdef
+$TL/Editor/Validation/Rules/T.cs $TL/Editor/Bowling.Tooling.Editor.asmdef
+$TL/Tests/EditMode/T.cs $TL/Tests/EditMode/Bowling.Tooling.Tests.EditMode.asmdef
+_Project/Modules/App/Runtime/T.cs _Project/Modules/App/Runtime/Bowling.App.asmdef
+_Project/Modules/App/Editor/T.cs _Project/Modules/App/Editor/Bowling.App.Editor.asmdef
+$GP/Foo/T.cs $GP/Foo/Bowling.Gameplay.Foo.asmdef
+$GP/Foo/Deep/T.cs $GP/Bowling.Gameplay.asmdef
 Plugins/FMOD/T.cs
 Plugins/FMOD/Deep/T.cs
 Scripts/T.txt
 Scripts/T.uss
 _Project/Scripts/T.txt
-_Project/Modules/Gameplay/Foo/T.uss
+$GP/Foo/T.uss
 EOF
 
 # M-8, color literals: only in declaration values, and not in Styles/Tokens.uss.
@@ -1116,10 +1148,28 @@ assert_output_contains "M-6 Assets/Other/Gradients.cs " in_dir "$TS" "$CHECK" --
 assert_output_contains "M-6 Assets/_Project/Modules/Tooling/Loose.cs " in_dir "$TS" "$CHECK" --staged
 assert_exit 0 output_lacks "G-2 Assets/_Project/Modules/Tooling" in_dir "$TS" "$CHECK" --staged
 assert_exit 0 output_lacks "FMOD" in_dir "$TS" "$CHECK" --staged
+# Staged (ruling R30): M-6 reads the asmdefs from the index, so one committed earlier counts, one that is
+# only in the working tree does not, and one staged with the code does.
+AS="$SPACED/asmdef staged repo"
+new_repo "$AS"
+put "$AS" "$UNITY/Modules/Gameplay/Runtime/Bowling.Gameplay.asmdef" '{ "name": "Bowling.Gameplay" }'
+git -C "$AS" add -A
+git -C "$AS" commit -q -m asmdef
+put "$AS" "$UNITY/Modules/Gameplay/Runtime/Core/Placed.cs" 'public class Placed { }'
+git -C "$AS" add -A
+assert_exit 0 in_dir "$AS" "$CHECK" --staged
+put "$AS" "$UNITY/Modules/Gameplay/Editor/Menu.cs" 'public class Menu { }'
+put "$AS" "$UNITY/Modules/Gameplay/Editor/Bowling.Gameplay.Editor.asmdef" '{ "name": "Bowling.Gameplay.Editor" }'
+git -C "$AS" add "$UNITY/Modules/Gameplay/Editor/Menu.cs"
+assert_exit 1 in_dir "$AS" "$CHECK" --staged
+assert_output_contains "M-6 Assets/_Project/Modules/Gameplay/Editor/Menu.cs " in_dir "$AS" "$CHECK" --staged
+git -C "$AS" add -A
+assert_exit 0 in_dir "$AS" "$CHECK" --staged
 # A long file: 301 lines only warn (exit 0), 401 fail.
 LONG="$SPACED/long repo"
 new_repo "$LONG"
 put "$LONG" "$UNITY/Modules/Gameplay/Runtime/Core/Long.cs" "$(gen_lines 301)"
+put "$LONG" "$UNITY/Modules/Gameplay/Runtime/Bowling.Gameplay.asmdef" '{ "name": "Bowling.Gameplay" }'
 git -C "$LONG" add -A
 assert_exit 0 in_dir "$LONG" "$CHECK" --staged
 assert_output_contains "WARN M-4 Assets/_Project/Modules/Gameplay/Runtime/Core/Long.cs 301 lines (soft limit 300)" in_dir "$LONG" "$CHECK" --staged
@@ -1132,6 +1182,7 @@ assert_output_contains "M-4 Assets/_Project/Modules/Gameplay/Runtime/Core/Long.c
 # is judged by the files it has in the index, not only by the staged ones.
 UI="$UNITY/Modules/UI/Runtime/Components"
 UI_MSG="Assets/_Project/Modules/UI/Runtime/Components"
+UI_ASMDEF="$UNITY/Modules/UI/Runtime/Bowling.UI.asmdef"
 # put_component <repo> <name>: a complete component folder.
 put_component() {
   put "$1" "$UI/$2/$2.uxml" '<ui:UXML xmlns:ui="UnityEngine.UIElements" />'
@@ -1142,6 +1193,7 @@ put_component() {
 # A complete folder is committed; staging a change to just Badge.cs passes.
 CR="$SPACED/component repo"
 new_repo "$CR"
+put "$CR" "$UI_ASMDEF" '{ "name": "Bowling.UI" }'
 put_component "$CR" Badge
 put_component "$CR" "My Badge"
 git -C "$CR" add -A
@@ -1187,6 +1239,7 @@ assert_exit 0 prints_nothing in_dir "$CR" "$CHECK" --staged
 # A new folder with only Badge.uxml and Badge.cs fails, with the missing file named.
 NB="$SPACED/new component repo"
 new_repo "$NB"
+put "$NB" "$UI_ASMDEF" '{ "name": "Bowling.UI" }'
 put "$NB" "$UI/Badge/Badge.uxml" '<ui:UXML xmlns:ui="UnityEngine.UIElements" />'
 put "$NB" "$UI/Badge/Badge.cs" 'public class Badge { }'
 git -C "$NB" add -A
@@ -1202,6 +1255,7 @@ assert_exit 0 in_dir "$NB" "$CHECK" --staged
 # stays quiet while a complete one is changed. (M-8 in --all mode still reports it.)
 OLD="$SPACED/old component repo"
 new_repo "$OLD"
+put "$OLD" "$UI_ASMDEF" '{ "name": "Bowling.UI" }'
 put "$OLD" "$UI/Old/Old.cs" 'public class Old { }'
 put_component "$OLD" Fresh
 git -C "$OLD" add -A
@@ -1257,8 +1311,9 @@ assert_exit 0 test "$(git -C "$H" rev-list --count HEAD)" = 2
 
 # A warning (a 301-line file, M-4) is printed but doesn't block the commit; a 401-line file does.
 LONG_CS="$UNITY/Modules/Gameplay/Runtime/Core/Long.cs"
+put "$H" "$UNITY/Modules/Gameplay/Runtime/Bowling.Gameplay.asmdef" '{ "name": "Bowling.Gameplay" }'
 put "$H" "$LONG_CS" "$(gen_lines 401)"
-git -C "$H" add "$LONG_CS"
+git -C "$H" add "$UNITY/Modules/Gameplay/Runtime/Bowling.Gameplay.asmdef" "$LONG_CS"
 assert_exit 1 git -C "$H" commit -q -m toolong
 assert_output_contains "M-4 Assets/_Project/Modules/Gameplay/Runtime/Core/Long.cs 401 lines (max 400)" git -C "$H" commit -q -m toolong
 put "$H" "$LONG_CS" "$(gen_lines 301)"
