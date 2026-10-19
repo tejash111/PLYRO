@@ -210,15 +210,19 @@ rule_M_5() {
 # M-6: every .cs file under Assets/ is inside a module asmdef folder: a folder inside
 # Modules/<Module>/ that holds an .asmdef, or a folder below one (a .cs anywhere else would compile
 # into the default Assembly-CSharp). The asmdef decides, not the folder name; where an asmdef may sit
-# is M-1's job. Tooling counts as a module. FMOD (vendor) is not listed at all.
-# The asmdefs come from tree_files, so in staged mode an asmdef counts when it is in the index.
+# is M-1's job. Tooling counts as a module. FMOD (vendor) is not listed at all, and a .cs in a folder
+# whose name ends in ~ is skipped: Unity doesn't import such folders (Samples~/, Documentation~/).
+# The asmdefs come from tree_files, so in staged mode an asmdef counts when it is in the index. Staged
+# mode judges only the staged .cs files, so staging just the deletion of an asmdef is not seen here;
+# --all (verify.sh step 1) and the editor rule M-1 report it.
 # ---------------------------------------------------------------------------------------------
 IFS= read -r -d '' AWK_M6 <<'EOF' || true
 BEGIN { while ((getline d < dirs) > 0) asmdef_dir[d] = 1 }
+index($0, "~/") > 0 { next }
 {
   d = $0
   while (sub(/\/[^\/]*$/, "", d)) if (d in asmdef_dir) next
-  print "M-6 Assets/" $0 " code must live in a module asmdef folder (a folder in Assets/_Project/Modules/<Module>/ with an .asmdef, or below one): move it next to the module's asmdef in Runtime/, Editor/, Tests/EditMode/ or Tests/PlayMode/"
+  print "M-6 Assets/" $0 " code must live in a module asmdef folder (a folder in Assets/_Project/Modules/<Module>/ with an .asmdef, or below one): move it into the module's Runtime/, Editor/, Tests/EditMode/ or Tests/PlayMode/ folder, and give that folder its asmdef if it has none"
 }
 EOF
 

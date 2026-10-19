@@ -697,7 +697,8 @@ assert_exit 0 run_one M-5 Modules/Gameplay/Runtime/T.uss "$FIND"
 
 # M-6: every .cs under Assets is inside a module asmdef folder: a folder inside Modules/<M>/ that holds an
 # .asmdef, or a folder below one. The asmdef decides, not the folder name (ruling R30). Tooling counts as
-# a module. Only Plugins/FMOD (vendor) is exempt.
+# a module. Only Plugins/FMOD (vendor) and folders whose name ends in ~ (Unity doesn't import them) are
+# exempt.
 M6F="$FIXTURES/fail/M-6/Assets"
 assert_output_contains "M-6 Assets/_Project/Scripts/Loose.cs " "$CHECK" --root "$M6F" --rules M-6
 assert_output_contains "M-6 Assets/Scripts/Loose.cs " "$CHECK" --root "$M6F" --rules M-6
@@ -755,6 +756,10 @@ $GP/Runtime/T.cs _Project/Bowling.Project.asmdef
 $GP/Runtime/T.cs Bowling.Everything.asmdef
 Scripts/T.cs Scripts/Bowling.Rogue.asmdef
 _Project/Scripts/T.cs _Project/Scripts/Bowling.Rogue.asmdef
+Scripts~x/T.cs
+~Scripts/T.cs
+$GP/Samples~x/T.cs
+$GP/~Samples/T.cs
 EOF
 while IFS= read -r files; do
   # shellcheck disable=SC2086 # one case per line, its paths split on spaces
@@ -780,6 +785,11 @@ Scripts/T.txt
 Scripts/T.uss
 _Project/Scripts/T.txt
 $GP/Foo/T.uss
+Scripts~/T.cs
+_Project/Scripts~/Deep/T.cs
+$GP/Samples~/T.cs
+$GP/Runtime/Documentation~/T.cs
+$TL/Tests/EditMode/Fixtures~/M-1/pass/Scripts~/T.cs
 EOF
 
 # M-8, color literals: only in declaration values, and not in Styles/Tokens.uss.
