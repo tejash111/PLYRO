@@ -267,7 +267,7 @@ Two layers share one rule set:
 
 **Scan scope:**
 
-- Each rule's row says what it scans. The default is `Assets/_Project/**`. G-1 scans `.uss`/`.uxml` anywhere under `Assets/`. G-2 and M-6 scan `.cs` anywhere under `Assets/`. G-4 scans every volume profile under `Assets/`.
+- Each rule's row says what it scans. The default is `Assets/_Project/**`. G-1 scans `.uss`/`.uxml` anywhere under `Assets/`, and M-8's colour-literal check scans `.uss` anywhere under `Assets/`. G-2 and M-6 scan `.cs` anywhere under `Assets/`. G-4 scans every volume profile under `Assets/`.
 - Excluded from every rule: vendor folders (`Assets/Plugins/FMOD/**`, `Packages/**`) and `tools/checks/**`.
 - Excluded from the G rules only: `Assets/_Project/Modules/Tooling/**`, because it contains the banned patterns as data. G-4 is the one exception: it judges every volume profile outside vendor folders, Tooling included, since Tooling holds none. The M rules judge Tooling like any other module.
 
@@ -386,6 +386,7 @@ These rulings were made while the plan ran, and the sections above already refle
   - M-6 judges a module asmdef folder by the `.asmdef` in it, not by its name: a `.cs` in `Modules/<Module>/Runtime/` with no asmdef there fails, because Unity would compile it into `Assembly-CSharp`.
   - M-6 skips a `.cs` inside a folder whose name ends in `~` (such as `Samples~/` or `Documentation~/`): Unity doesn't import those folders, so the code is never compiled.
   - G-2 also catches `new global::UnityEngine.Gradient(`, and a target-typed `new(` that initializes a `Gradient` property (`{ get; } = new()`), is the expression body of a `Gradient` property or method (`=> new()`), or is its getter (`{ get => new(); }`). The explicit `{ get; } = new Gradient()` was already caught.
+  - The scan-scope paragraph names M-8's scope again (its colour-literal check reads `.uss` anywhere under `Assets/`), which the R25 rewrite had dropped.
 
 ## 13. Decisions made here (Claude's calls, please check)
 
