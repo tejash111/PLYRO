@@ -20,6 +20,9 @@ unity/MotionBowling/*.sln
 # Scratch output of the tests (Unity also generates a .meta for the folder)
 unity/MotionBowling/Assets/_TestTemp/
 unity/MotionBowling/Assets/_TestTemp.meta
+# The G-6 default-root tests put a _TestTempG6 folder inside real project folders
+unity/MotionBowling/Assets/**/_TestTempG6/
+unity/MotionBowling/Assets/**/_TestTempG6.meta
 
 # IDE state
 .vs/
