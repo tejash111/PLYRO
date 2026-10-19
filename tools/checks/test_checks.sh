@@ -154,10 +154,14 @@ assert_output_contains "G-1 Assets/_Project/Styles/Extra.uss:2 " "$CHECK" --root
 assert_output_contains "G-1 Assets/_Project/Styles/Extra.uss:5 " "$CHECK" --root "$G1" --rules G-1
 assert_output_contains "G-1 Assets/Menus/Outside.uxml:2 " "$CHECK" --root "$G1" --rules G-1
 assert_exit 0 output_lacks "Extra.uss:8" "$CHECK" --root "$G1" --rules G-1
-# A var() among the first three tokens of a text-shadow fails (ruling R25); one after them does not.
+# A text-shadow with a var() and fewer than three literal lengths fails, wherever the var() is (rulings
+# R25, R29); with three literal lengths the var() is the colour and does not fail.
 assert_output_contains "G-1 Assets/_Project/Styles/Var.uss:2 " "$CHECK" --root "$G1" --rules G-1
 assert_output_contains "G-1 Assets/_Project/Styles/Var.uss:5 " "$CHECK" --root "$G1" --rules G-1
 assert_exit 0 output_lacks "Var.uss:8" "$CHECK" --root "$G1" --rules G-1
+assert_output_contains "G-1 Assets/_Project/Styles/Var.uss:11 " "$CHECK" --root "$G1" --rules G-1
+assert_exit 0 output_lacks "Var.uss:14 " "$CHECK" --root "$G1" --rules G-1
+assert_output_contains "G-1 Assets/_Project/Styles/Var.uss:17 " "$CHECK" --root "$G1" --rules G-1
 
 # G-2 skips lines that start with //, but still flags the same token in code (Review Focus 4).
 G2="$FIXTURES/fail/G-2/Assets"
@@ -352,7 +356,11 @@ assert_exit 1 run_one G-1 T.uxml '<ui:Label style="text-shadow: 1px 1px 2px blac
 assert_exit 0 run_one G-1 T.uxml '<ui:Label style="text-shadow: 1px 1px 0px black;" />'
 assert_output_contains "found 4px" shadow 'text-shadow: 2px 2px 4px black;'
 
-# A var() among the first three value tokens fails, because the blur could be a token (ruling R25).
+# A value that has a var() and fewer than three literal lengths fails, because the blur could be a
+# token (rulings R25, R29). A colour-first value is judged the same way as a colour-last one.
+assert_exit 1 shadow 'text-shadow: black 1px 1px var(--blur);'
+assert_exit 1 shadow 'text-shadow: rgba(0, 0, 0, 0.5) 1px 1px var(--blur);'
+assert_exit 1 shadow 'text-shadow: #000 1px 1px var(--blur);'
 assert_exit 1 shadow 'text-shadow: 1px 1px var(--blur) black;'
 assert_exit 1 shadow 'text-shadow: 1px 1px var(--blur);'
 assert_exit 1 shadow 'text-shadow: var(--shadow);'
@@ -368,7 +376,28 @@ assert_exit 1 shadow 'text-shadow: 1px 1px
 assert_exit 1 shadow 'text-shadow: var(--shadow)'
 assert_exit 1 run_one G-1 T.uxml '<ui:Label style="text-shadow: 1px 1px var(--blur) black;" />'
 assert_exit 1 run_one G-1 T.uxml '<ui:Label style="text-shadow: var(--shadow);" />'
-# A var() after the first three tokens (the colour) is fine, and so is any var() that is not in a text-shadow.
+# With three literal lengths a var() can only be the colour, first or last, and the third length is
+# the blur as usual (ruling R29). Any var() that is not in a text-shadow is fine too.
+assert_exit 0 shadow 'text-shadow: var(--c) 2px 2px 0;'
+assert_exit 0 shadow 'text-shadow: 2px 2px 0px var(--ink);'
+assert_exit 0 shadow 'text-shadow: var(--c) 2px 2px 0px;'
+assert_exit 0 shadow 'text-shadow: var(--c, rgba(0, 0, 0, 0.5)) -1px -1px 0.0px;'
+assert_exit 0 shadow 'text-shadow: var(--c) 2px
+        2px 0;'
+assert_exit 0 shadow 'text-shadow: var(--c) 2px 2px 0'
+assert_exit 1 shadow 'text-shadow: var(--c) 2px 2px 3px;'
+assert_exit 1 shadow 'text-shadow: var(--c) 2px 2px .5px;'
+assert_exit 1 shadow 'text-shadow: 2px 2px 3px var(--ink);'
+assert_exit 1 shadow 'text-shadow: var(--c) 2px
+        2px 3px;'
+assert_exit 1 shadow 'text-shadow: var(--c) 2px 2px'
+# A multi-line value with no semicolon that runs to the end of the file is judged the same way.
+assert_exit 1 run_one G-1 T.uss 'text-shadow: black 1px
+        1px var(--blur)'
+assert_exit 1 run_one G-1 T.uss 'text-shadow: var(--c) 2px
+        2px 3px'
+assert_exit 0 run_one G-1 T.uss 'text-shadow: var(--c) 2px
+        2px 0'
 assert_exit 0 shadow 'text-shadow: 2px 2px 0 var(--color-shadow);'
 assert_exit 0 shadow 'text-shadow: 2px 2px 0px var(--color, rgba(0, 0, 0, 0.5));'
 assert_exit 0 shadow 'text-shadow: 2px 2px 0 var(--c) ;'
@@ -376,8 +405,10 @@ assert_exit 0 shadow 'text-shadow: none; color: var(--color);'
 assert_exit 0 run_one G-1 T.uss '.a { text-shadow: 0 0 0 black; color: var(--text); }
 .b { margin-left: var(--gap); }'
 assert_exit 0 run_one G-1 T.uxml '<ui:Label style="text-shadow: 1px 1px 0px var(--c);" />'
-assert_output_contains "write the blur radius as a literal 0" shadow 'text-shadow: 1px 1px var(--blur) black;'
+assert_output_contains "text-shadow blur can't be checked through var(): write the x, y and blur lengths as literals (blur 0)" shadow 'text-shadow: 1px 1px var(--blur) black;'
+assert_output_contains "text-shadow blur can't be checked through var(): write the x, y and blur lengths as literals (blur 0)" shadow 'text-shadow: black 1px 1px var(--blur);'
 assert_output_contains "G-1 Assets/_Project/T.uss:2 " shadow 'text-shadow: var(--shadow);'
+assert_output_contains "found 3px" shadow 'text-shadow: var(--c) 2px 2px 3px;'
 # A colour function is one token whatever is in it: its numbers are not lengths.
 assert_exit 1 shadow 'text-shadow: rgba(10, 20, 30, 0.5) 1px 1px 3px;'
 assert_exit 1 shadow 'text-shadow: rgba( 10 , 20 , 30 , 0.5 ) 1px 1px 3px;'

@@ -7,3 +7,12 @@
 .c {
     text-shadow: 1px 1px 0 var(--color);
 }
+.d {
+    text-shadow: black 1px 1px var(--blur);
+}
+.e {
+    text-shadow: var(--c) 2px 2px 0;
+}
+.f {
+    text-shadow: var(--c) 2px 2px 3px;
+}

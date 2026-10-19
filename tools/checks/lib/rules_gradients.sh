@@ -18,9 +18,11 @@ conic-gradient[(]'
 # several lines and ends at ; or } (or at the quote that closes a style="..." attribute). The
 # third length is the blur radius and must be zero. A value with two lengths has no blur.
 # The value is read as tokens: pieces between spaces, where a space inside ( ) does not split, so
-# rgba(0, 0, 0, 0.5) and var(--c, 1px 2px) are one token each. A var( in the first three tokens
-# fails, because the blur could be the token (the color may come first, so this also catches a
-# color token there).
+# rgba(0, 0, 0, 0.5) and var(--c, 1px 2px) are one token each. A literal length is a token that
+# starts with a digit, a sign or a dot. A value that has var( anywhere and fewer than three
+# literal lengths fails, because the blur could be the var(). With three literal lengths a var(
+# can only be the color (USS takes at most three lengths), so the third one is judged as usual
+# (ruling R29).
 IFS= read -r -d '' AWK_TEXT_SHADOW <<'EOF' || true
 function tokens(v, t,    n, i, c, depth, cur) {
   n = 0
@@ -43,18 +45,16 @@ function tokens(v, t,    n, i, c, depth, cur) {
 function check(v, at,    n, i, t, lens, third) {
   v = tolower(v)
   n = tokens(v, t)
-  for (i = 1; i <= n && i <= 3; i++) {
-    if (index(t[i], "var(") > 0) {
-      print rule " Assets/" file ":" at " text-shadow uses var() in its first three tokens: write the blur radius as a literal 0 (blur via a token can't be checked)"
-      return
-    }
-  }
   lens = 0
   for (i = 1; i <= n; i++) {
     if (t[i] ~ /^[-+]?[.]?[0-9]/) {
       lens++
       if (lens == 3) { third = t[i]; break }
     }
+  }
+  if (lens < 3 && index(v, "var(") > 0) {
+    print rule " Assets/" file ":" at " text-shadow blur can't be checked through var(): write the x, y and blur lengths as literals (blur 0)"
+    return
   }
   if (lens == 3 && third + 0 != 0)
     print rule " Assets/" file ":" at " text-shadow blur radius must be 0, found " third

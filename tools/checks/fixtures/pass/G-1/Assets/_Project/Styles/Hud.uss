@@ -22,3 +22,6 @@
 .token-color {
     text-shadow: 2px 2px 0 var(--color-shadow);
 }
+.token-first {
+    text-shadow: var(--color-shadow) 2px 2px 0;
+}
