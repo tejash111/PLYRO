@@ -99,15 +99,18 @@ rule_G_1() {
 
 # ---------------------------------------------------------------------------------------------
 # G-2: gradient, vignette and ambient APIs in .cs, anywhere under Assets. Lines that start with //
-# are ignored. The constructor patterns cover new Gradient( and new UnityEngine.Gradient( with
-# optional spaces, new Gradient { ... }, a new Gradient that ends its line or runs on into a //
-# comment (its { is on the next line), and the target-typed form "Gradient name = new(". FilmGrain
+# are ignored. The constructor patterns cover new Gradient(, new UnityEngine.Gradient( and
+# new global::UnityEngine.Gradient( with optional spaces, new Gradient { ... }, a new Gradient that
+# ends its line or runs on into a // comment (its { is on the next line), and the target-typed form
+# "Gradient name = new(", also as a property initializer "Gradient Name { get; } = new(" (any
+# accessors), as an expression body "Gradient Name => new(" or "Gradient Make(...) => new(", and as a
+# getter "Gradient Name { get => new(" (ruling R30). FilmGrain
 # and Bloom are whole words (the awk here has no \b): they are the URP types G-4 judges. A line or
 # trail renderer's end color is a gradient end, so it has its own message; .startColor is not
 # banned, because ParticleSystem.MainModule.startColor is a flat color.
 # ---------------------------------------------------------------------------------------------
-G2_PATTERNS='(^|[^A-Za-z0-9_])new[[:space:]]+(UnityEngine[.])?Gradient[[:space:]]*([({]|//|$)
-(^|[^A-Za-z0-9_])Gradient[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=[[:space:]]*new[[:space:]]*[({]
+G2_PATTERNS='(^|[^A-Za-z0-9_])new[[:space:]]+(global::)?(UnityEngine[.])?Gradient[[:space:]]*([({]|//|$)
+(^|[^A-Za-z0-9_])Gradient[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*([(][^)]*[)][[:space:]]*)?([{][^}]*[}][[:space:]]*|[{][[:space:]]*get[[:space:]]*)?=>?[[:space:]]*new[[:space:]]*[({]
 GradientColorKey
 GradientAlphaKey
 colorGradient

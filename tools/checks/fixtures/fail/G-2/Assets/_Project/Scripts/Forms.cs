@@ -6,4 +6,7 @@ public class Forms
     private void Trail(LineRenderer line) { line.endColor = Color.white; }
     private void Flat(LineRenderer line, ParticleSystem.MainModule main) { line.startColor = Color.white; main.startColor = Color.white; }
     private void Post() { var a = typeof(FilmGrain); var b = typeof(Bloom); }
+    private object _d = new global::UnityEngine.Gradient();
+    public Gradient Ramp { get; } = new();
+    public Gradient Glow => new();
 }

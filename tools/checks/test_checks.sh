@@ -170,9 +170,10 @@ assert_output_contains "G-2 Assets/_Project/Scripts/Bad.cs:5 " "$CHECK" --root "
 assert_output_contains "G-2 Assets/_Project/Scripts/Bad.cs:6 " "$CHECK" --root "$G2" --rules G-2
 assert_exit 0 output_lacks "Bad.cs:1 " "$CHECK" --root "$G2" --rules G-2
 assert_exit 0 output_lacks "Bad.cs:2 " "$CHECK" --root "$G2" --rules G-2
-# G-2 reads all of Assets (ruling R25), the constructor forms, .endColor =, FilmGrain and Bloom.
+# G-2 reads all of Assets (ruling R25), the constructor forms, .endColor =, FilmGrain and Bloom, and
+# (ruling R30) new global::UnityEngine.Gradient( and a target-typed new( for a Gradient property.
 assert_output_contains "G-2 Assets/Other/Outside.cs:3 " "$CHECK" --root "$G2" --rules G-2
-for ln in 3 4 5 6 8; do
+for ln in 3 4 5 6 8 9 10 11; do
   assert_output_contains "G-2 Assets/_Project/Scripts/Forms.cs:$ln " "$CHECK" --root "$G2" --rules G-2
 done
 assert_exit 0 output_lacks "Forms.cs:7 " "$CHECK" --root "$G2" --rules G-2
@@ -249,6 +250,23 @@ trail.endColor   = c;
 var t = typeof(FilmGrain);
 volume.profile.TryGet(out Bloom bloom);
 class Bloom : VolumeComponent { }
+var g = new global::UnityEngine.Gradient();
+var g = new global::UnityEngine.Gradient { mode = GradientMode.Fixed };
+object g = new global::UnityEngine.Gradient
+public Gradient Ramp { get; } = new Gradient();
+public Gradient Ramp { get; } = new global::UnityEngine.Gradient();
+public Gradient Ramp { get; } = new();
+public Gradient Ramp { get; set; } = new ();
+public Gradient Ramp { get; private set; } = new() { mode = GradientMode.Fixed };
+public UnityEngine.Gradient Ramp { get; init; } = new();
+public global::UnityEngine.Gradient Ramp { get; } = new();
+static Gradient Ramp{get;}=new();
+public Gradient Ramp => new();
+public Gradient Ramp=>new() { mode = GradientMode.Fixed };
+public Gradient Ramp { get => new(); }
+public Gradient Ramp {get=>new() { mode = GradientMode.Fixed };}
+Gradient Make() => new();
+static Gradient Make(int keys) => new() { mode = GradientMode.Fixed };
 EOF
 while IFS= read -r stmt; do
   assert_exit 0 run_one G-2 T.cs "$stmt"
@@ -272,6 +290,18 @@ var MyBloom = 1f;
 var Bloom_Strength = 1f;
 var FilmGrainy = 1f;
 var xFilmGrain = 1f;
+public Gradient Ramp { get; } = null;
+public Gradient Ramp { get; } = Make();
+public Gradient Ramp => _ramp;
+public Gradient Ramp { get => _ramp; set => _ramp = value; }
+public Gradient Ramp { get => _ramp; set => _ramp = new Thing(); }
+Gradient Make(Gradient g) => g;
+Gradient Make() => Build();
+public Gradient[] Ramps { get; } = new Gradient[2];
+public List<Gradient> Ramps { get; } = new();
+public GradientMode Mode { get; } = new();
+var h = new global::UnityEngine.GradientHelper();
+if (ramp == new Thing()) { }
 EOF
 # A constructor whose { starts on the next line (Allman style) is found too.
 assert_exit 1 run_one G-2 T.cs 'var g = new Gradient
