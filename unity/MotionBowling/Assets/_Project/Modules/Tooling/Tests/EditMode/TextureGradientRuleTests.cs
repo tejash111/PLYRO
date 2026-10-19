@@ -231,14 +231,18 @@ namespace Bowling.Tooling.Tests
         }
 
         [Test]
-        public void TheDefaultFoldersAreSkippedSilentlyWhenTheyDoNotExist()
+        public void ADefaultFolderThatDoesNotExistIsSkippedSilently()
         {
+            // Ruling R16. The real default, Assets/_Project, always exists, so the defaults here are a missing folder
+            // and the test folder: the missing one adds no violation and the other is still scanned.
+            string path = TextureFixtures.Png(_folder, "Ramp", 256, 4, TextureFixtures.Ramp);
             var context = TempAssets.Context(_folder);
             context.TextureSearchRoots = null;
+            context.DefaultTextureSearchRoots = new[] { $"{_folder}/Missing", _folder };
 
             List<Violation> violations = new TextureGradientRule().Run(context).ToList();
 
-            Assert.That(violations.Where(v => v.Message.Contains("not found")), Is.Empty);
+            AssertOneViolation(violations, path, "smooth-ramp pixels");
         }
 
         [Test]

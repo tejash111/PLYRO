@@ -50,11 +50,17 @@ namespace Bowling.Tooling.Editor
         public string AssetSearchRoot = DefaultAssetSearchRoot;
 
         /// <summary>
-        /// The asset folders G-6 scans for color textures. <c>null</c> (the default) means the folder of the spec,
-        /// <c>Assets/_Project</c> (Tooling and vendor folders are filtered out), skipped when it does not exist.
-        /// A folder named here that does not exist is a violation.
+        /// The asset folders G-6 scans for color textures. <c>null</c> (the default) means
+        /// <see cref="DefaultTextureSearchRoots"/>. A folder named here that does not exist is a violation.
         /// </summary>
         public string[] TextureSearchRoots;
+
+        /// <summary>
+        /// The folders G-6 scans when <see cref="TextureSearchRoots"/> is <c>null</c>: the folder of the spec,
+        /// <c>Assets/_Project</c> (Tooling and vendor folders are filtered out). A default folder that does not exist
+        /// is skipped silently (ruling R16); a test sets a missing one to show that.
+        /// </summary>
+        public string[] DefaultTextureSearchRoots = { "Assets/_Project" };
 
         public ModuleRules Rules;
 

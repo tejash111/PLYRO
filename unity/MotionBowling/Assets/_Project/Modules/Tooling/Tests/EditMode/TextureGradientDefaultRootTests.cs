@@ -41,7 +41,7 @@ namespace Bowling.Tooling.Tests
         [Test]
         public void TheDefaultRootIsAllOfProject()
         {
-            Assert.That(TextureGradientRule.DefaultRoots, Is.EqualTo(new[] { "Assets/_Project" }));
+            Assert.That(new ValidationContext().DefaultTextureSearchRoots, Is.EqualTo(new[] { "Assets/_Project" }));
         }
 
         [TestCase("Assets/_Project")]

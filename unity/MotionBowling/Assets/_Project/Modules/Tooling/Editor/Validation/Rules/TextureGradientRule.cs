@@ -10,7 +10,8 @@ namespace Bowling.Tooling.Editor
 {
     /// <summary>
     /// G-6 (foundation spec, section 8.1): a color texture anywhere under <c>Assets/_Project</c> except the Tooling
-    /// module (or under <see cref="ValidationContext.TextureSearchRoots"/>) may not hold a smooth ramp, judged by
+    /// module (the context's <see cref="ValidationContext.DefaultTextureSearchRoots"/>, or the folders named in
+    /// <see cref="ValidationContext.TextureSearchRoots"/>) may not hold a smooth ramp, judged by
     /// <see cref="GradientHeuristic"/> with the thresholds of <see cref="GradientHeuristicSettings"/>.
     /// <para>
     /// The rule reads the source PNG bytes, so any other color-texture file fails with "convert to PNG", a texture
@@ -22,12 +23,7 @@ namespace Bowling.Tooling.Editor
     /// </summary>
     public sealed class TextureGradientRule : IValidationRule
     {
-        public const string ProjectRoot = "Assets/_Project";
-
         public string Id => "G-6";
-
-        /// <summary>The folders scanned when the context names none: all of the project's own assets (Tooling and vendor folders are filtered out).</summary>
-        public static IReadOnlyList<string> DefaultRoots => new[] { ProjectRoot };
 
         public IEnumerable<Violation> Run(ValidationContext context)
         {
@@ -57,7 +53,7 @@ namespace Bowling.Tooling.Editor
         {
             bool named = context.TextureSearchRoots != null;
             var roots = new List<string>();
-            foreach (string folder in context.TextureSearchRoots ?? DefaultRoots.ToArray())
+            foreach (string folder in context.TextureSearchRoots ?? context.DefaultTextureSearchRoots)
             {
                 string root = folder.Replace('\\', '/').TrimEnd('/');
                 if (AssetDatabase.IsValidFolder(root)) roots.Add(root);
