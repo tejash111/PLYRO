@@ -84,6 +84,8 @@ Modules/Gameplay/Runtime/
 
 ## 4. State machine
 
+Section 11 refines the rules below; where they differ, section 11 wins.
+
 Every duration is a `GameplayTuning` field, with the default shown. Time comes from `IClock`.
 
 | State | On enter | Leaves when | Next |
@@ -98,7 +100,7 @@ Every duration is a `GameplayTuning` field, with the default shown. Time comes f
 | Scoring | `ScoreCard.AddRoll(result.PinsKnocked)`; build and assign the new `Current` (State = Scoring); then raise `StateChanged(Scoring)`, `RollScored` and `SnapshotChanged`, in that order | `scoringHold` (1.5 s) elapses, or `scoringHoldReplay` (4.5 s) when the mark is a Strike or Spare (presentation replay 3.5 s or less, plus 1.0 s) | the next ball's AwaitReady; the next player's Calibrate or AwaitReady; or GameOver |
 | Paused | `throwSource.Disarm()`; remember the resume state | Presence true again: resume, re-entering that state (Calibrate restarts; AwaitReady re-arms); or `abandonAfterPause` (15 s) elapses; or `Resume()` | (resume state); Attract (no leaderboard entry); (resume state) |
 | GameOver | Submit one `LeaderboardEntry` per player | `gameOverHold` (2.0 s) elapses | Results |
-| Results | — | `resultsHold` (10 s) elapses; or presence false for `resultsAbsent` (3 s); or `SelectMode(...)` ("Play again") | Attract; Attract; Calibrate (new game, same players count) |
+| Results | — | `resultsHold` (10 s) elapses; or presence false for `resultsAbsent` (3 s), counted from the later of Results entry and the start of the absence; or `SelectMode(...)` ("Play again") | Attract; Attract; Calibrate (new game, same players count) |
 
 **Pause rule.** In Calibrate, AwaitReady and AwaitThrow, presence false for `pauseAfterAbsent` (2.0 s) goes to Paused. PoseInput already debounces 1.0 s, so this is about 3 s of real absence. Rolling and Scoring never pause; the pause applies when the next state is entered.
 
@@ -232,6 +234,7 @@ Writing the plan (`docs/superpowers/plans/2026-10-19-gameplay.md`) surfaced one 
   - `FrameRules` takes freshness as an input, because a mask can't tell a fresh rack from one where ball 1 hit nothing.
 - **P-3 (absence and timers):**
   - "Presence false for X" means continuous absence of at least X. It is measured from the moment presence last became false (`PresenceChanged`, with a poll each Tick as a backstop), and it carries across state changes. Presence returning resets it.
+  - Results counts its absence from the later of Results entry and the start of the absence, as Paused does (P-5).
   - Every timer fires on the first Tick at which the elapsed time is at least its duration.
   - At most one timer-driven transition happens per Tick.
 - **P-4 (Calibrate):**

@@ -1,3 +1,4 @@
+using System;
 using Bowling.Contracts;
 
 namespace Bowling.Gameplay
@@ -48,8 +49,10 @@ namespace Bowling.Gameplay
 
                     break;
                 case GameState.Results:
-                    // Absence (counted from when presence went false, P-3) and the hold both end in Attract.
-                    if (_presence.AbsentFor(now) >= _tuning.ResultsAbsent || _host.TimeInState(now) >= _tuning.ResultsHold)
+                    // Absence and the hold both end in Attract. Absence counts from the later of Results entry and
+                    // the start of the absence (P-3), so a player who left during the last roll still sees Results.
+                    if (Math.Min(_presence.AbsentFor(now), _host.TimeInState(now)) >= _tuning.ResultsAbsent
+                        || _host.TimeInState(now) >= _tuning.ResultsHold)
                     {
                         _host.Enter(GameState.Attract);
                     }

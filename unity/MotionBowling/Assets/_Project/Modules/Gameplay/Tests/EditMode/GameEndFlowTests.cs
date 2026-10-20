@@ -95,6 +95,29 @@ namespace Bowling.Gameplay.Tests
         }
 
         [Test]
+        public void ResultsAbsenceCountsFromResultsEntry()
+        {
+            _rig.PlayToFirstBall();
+            PlayOpenFrame();
+            PlayOpenFrame();
+            _rig.Knock(3);
+            _rig.EndScoring();
+            _rig.Knock(4);
+            _rig.Input.SetPresent(false);       // the player leaves during the last Scoring hold
+            _rig.EndScoring();
+            _rig.Wait(_rig.Tuning.GameOverHold);
+            Assert.AreEqual(GameState.Results, Current.State);
+
+            // Gone for 3.5 s by now, but Results counts from its own entry (P-3).
+            _rig.Service.Tick();
+            Assert.AreEqual(GameState.Results, Current.State);
+            _rig.Wait(2.75);
+            Assert.AreEqual(GameState.Results, Current.State);
+            _rig.Wait(0.25);
+            Assert.AreEqual(GameState.Attract, Current.State);
+        }
+
+        [Test]
         public void PlayAgainStartsANewGame()
         {
             PlayToResults();
