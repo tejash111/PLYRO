@@ -31,6 +31,7 @@ namespace Bowling.Gameplay
         {
             if (_host.State != GameState.Calibrate)
             {
+                Ignored("CalibrationCompleted");
                 return;
             }
 
@@ -48,10 +49,11 @@ namespace Bowling.Gameplay
         {
             if (_host.State != GameState.Calibrate)
             {
+                Ignored("CalibrationFailed");
                 return;
             }
 
-            if (!_calibration.Failed(reason, _presence.IsPresent))
+            if (!_calibration.Failed(reason, _presence.IsPresent))    // the bool means "gave up after the second Timeout" (P-4)
             {
                 return;
             }
@@ -61,60 +63,83 @@ namespace Bowling.Gameplay
         }
 
         /// <summary>
-        /// AwaitReady only: the source has left its waiting phase and the swing is under way. Every other phase is
-        /// ignored, silently: <c>Arm</c> and <c>Disarm</c> raise <c>PhaseChanged</c> too, and it reaches this method
-        /// right after the call that caused it (P-7).
+        /// AwaitReady only: the source has left its waiting phase and the swing is under way. Every other state and
+        /// every other phase is ignored, silently: <c>Arm</c> and <c>Disarm</c> raise <c>PhaseChanged</c> too, and it
+        /// reaches this method right after the call that caused it (P-7), so it is not an unexpected input.
         /// </summary>
         public void OnPhaseChanged(SwingPhase phase)
         {
-            if (_host.State != GameState.AwaitReady)
+            bool swinging = phase == SwingPhase.Ready || phase == SwingPhase.Backswing || phase == SwingPhase.ForwardSwing;
+            if (_host.State != GameState.AwaitReady || !swinging)
             {
                 return;
             }
 
-            if (phase == SwingPhase.Ready || phase == SwingPhase.Backswing || phase == SwingPhase.ForwardSwing)
-            {
-                _host.Enter(GameState.AwaitThrow);
-            }
+            _host.Enter(GameState.AwaitThrow);
         }
 
         /// <summary>
         /// AwaitThrow, or AwaitReady when the source passed Ready within one frame (P-10): rolls the throw as it came,
-        /// camera-clock timestamp included, and enters Rolling.
+        /// camera-clock timestamp included, and enters Rolling. Any other state warns.
         /// </summary>
         public void OnThrown(ThrowEvent throwEvent)
         {
-            if (_host.State == GameState.AwaitThrow || _host.State == GameState.AwaitReady)
+            if (_host.State != GameState.AwaitThrow && _host.State != GameState.AwaitReady)
             {
-                _sim.Roll(throwEvent);
-                _host.Enter(GameState.Rolling);
+                Ignored("Thrown");
+                return;
             }
+
+            _sim.Roll(throwEvent);
+            _host.Enter(GameState.Rolling);
         }
 
         /// <summary>
         /// AwaitThrow only: the swing was aborted, so AwaitReady is entered again, which re-arms without using the ball.
-        /// AwaitReady ignores it: the source is already waiting (P-10).
+        /// AwaitReady ignores it silently: the source is already waiting (P-10). Any other state warns.
         /// </summary>
         public void OnRejected(ThrowRejection reason)
         {
-            if (_host.State == GameState.AwaitThrow)
+            if (_host.State == GameState.AwaitReady)
             {
-                _host.Enter(GameState.AwaitReady);
+                return;
             }
+
+            if (_host.State != GameState.AwaitThrow)
+            {
+                Ignored("Rejected");
+                return;
+            }
+
+            _host.Enter(GameState.AwaitReady);
         }
 
         /// <summary>
-        /// Rolling only: scores the result, then has the host enter Scoring with the outcome, which publishes the
-        /// scored-roll event order (R22). The outcome still names the roll just scored (P-11).
+        /// Rolling only: scores the result against the session's rack (P-9), then has the host enter Scoring with the
+        /// outcome, which publishes the scored-roll event order (R22). The outcome still names the roll just scored
+        /// (P-11). A result that started from a different rack than the session's is warned about, and the outcome
+        /// keeps it unchanged. Any other state warns.
         /// </summary>
         public void OnRollCompleted(RollResult result)
         {
-            if (_host.State == GameState.Rolling)
+            if (_host.State != GameState.Rolling)
             {
-                GameSession session = _host.Session;
-                MarkKind mark = session.ScoreRoll(result);
-                _host.EnterScoring(new RollOutcome(session.CurrentPlayer, result, mark));
+                Ignored("RollCompleted");
+                return;
             }
+
+            GameSession session = _host.Session;
+            if (result.StandingBefore != session.Rack)
+            {
+                _host.Warn("StandingBefore " + result.StandingBefore + " differs from the rack " + session.Rack
+                    + "; scoring against the rack");
+            }
+
+            MarkKind mark = session.ScoreRoll(result);
+            _host.EnterScoring(new RollOutcome(session.CurrentPlayer, result, mark));
         }
+
+        // P-10: an input the current state doesn't take is dropped, and the warning names both.
+        private void Ignored(string eventName) => _host.Warn(eventName + " ignored in " + _host.State);
     }
 }

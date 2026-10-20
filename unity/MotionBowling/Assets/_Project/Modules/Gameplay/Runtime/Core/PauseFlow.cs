@@ -34,8 +34,9 @@ namespace Bowling.Gameplay
         public bool AbandonDeferred { get; private set; }
 
         /// <summary>
-        /// The host's Tick, before anything else: a deferred <c>Pause()</c> applies on the first Tick after Rolling and
-        /// Scoring are over (P-6). True when it entered Paused, which is then this Tick's one transition (P-3).
+        /// The host's Tick, after the presence poll and before any other rule: a deferred <c>Pause()</c> applies on the
+        /// first Tick after Rolling and Scoring are over (P-6). True when it entered Paused, which is then this Tick's
+        /// one transition (P-3).
         /// </summary>
         public bool ApplyDeferredPause()
         {

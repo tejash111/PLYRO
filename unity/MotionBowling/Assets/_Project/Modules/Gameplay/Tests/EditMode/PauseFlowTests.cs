@@ -189,6 +189,22 @@ namespace Bowling.Gameplay.Tests
         }
 
         [Test]
+        public void TurnChangeFlagSurvivesPauseAndResume()
+        {
+            ReachTurnChangeCalibrate();
+
+            _rig.Service.Pause();
+            Assert.AreEqual(GameState.Paused, Current.State);
+            _rig.Service.Resume();
+            Assert.AreEqual(GameState.Calibrate, Current.State);
+
+            // The zone has been empty for 2.5 s now: over the 2 s rule, under the 30 s turn-change wait.
+            _rig.Wait(1.0);
+
+            Assert.AreEqual(GameState.Calibrate, Current.State, "the resumed Calibrate is still a turn change");
+        }
+
+        [Test]
         public void TheNextPlayerSteppingInBeginsCalibration()
         {
             ReachTurnChangeCalibrate();

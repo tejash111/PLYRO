@@ -171,6 +171,9 @@ namespace Bowling.Gameplay
         /// <summary>P-6: a command where it doesn't apply, for the flows too: <c>Info("Gameplay", "&lt;Command&gt; ignored in &lt;State&gt;")</c>.</summary>
         internal void Ignore(string command) => _log.Info(LogCategory, command + " ignored in " + State);
 
+        /// <summary>P-9, P-10: a warning from the flows, with category <c>"Gameplay"</c>.</summary>
+        internal void Warn(string message) => _log.Warn(LogCategory, message);
+
         /// <summary>A transition: the state, its entry time and on-enter actions, then the R21 events.</summary>
         internal void Enter(GameState state)
         {
