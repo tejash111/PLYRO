@@ -52,16 +52,27 @@ namespace Bowling.Gameplay.Tests
             {
                 if (s == GameState.ModeSelect)
                 {
-                    _rig.Service.SelectMode(1, 3, Difficulty.Casual);
+                    _rig.Service.SelectMode(2, 5, Difficulty.Standard);
                     _rig.Service.SelectMode(1, 3, Difficulty.Casual);
                 }
             };
 
             _rig.Join();
 
-            Assert.AreEqual(GameState.Calibrate, _rig.Service.Current.State);
+            // The first call wins: it starts the game, and the second then finds Calibrate and is ignored.
+            GameSnapshot current = _rig.Service.Current;
+            Assert.AreEqual(GameState.Calibrate, current.State);
+            Assert.AreEqual(2, current.Players.Count);
+            Assert.AreEqual(5, current.FrameCount);
+            Assert.AreEqual(Difficulty.Standard, current.Difficulty.Level);
             Assert.That(_rig.Log.Entries, Has.Exactly(1).Matches<GameLogEntry>(e =>
                 e.Level == GameLogLevel.Info && e.Category == "Gameplay" && e.Message == "SelectMode ignored in Calibrate"));
+            Assert.That(_rig.Events, Is.EqualTo(new[]
+            {
+                "State:Join", "Snapshot:Join",
+                "State:ModeSelect", "Snapshot:ModeSelect",
+                "State:Calibrate", "Snapshot:Calibrate",
+            }));
         }
     }
 }
