@@ -52,6 +52,8 @@ Modules/Gameplay/Runtime/
 │  ├─ PauseTracker.cs            resume state, deferred operator pause, absence seen while paused (P-5, P-6)
 │  ├─ GamePublisher.cs           raises the game events in the section 6 order, one subscriber at a time (P-8)
 │  ├─ LeaderboardWriter.cs       submits one LeaderboardEntry per player at GameOver (P-12)
+│  ├─ CalibrationRun.cs          the Calibrate attempt: timeout count, running flag, Begin/Cancel calls (P-4)
+│  ├─ StateEntryActions.cs       on-enter effects on throw source and simulator (the Attract guard; AwaitReady's rack, bumpers, Arm)
 │  └─ DefaultProfiles.cs         fallback PlayerProfile when calibration fails twice
 └─ Config/
    ├─ GameplayTuning.cs          ScriptableObject: every timer in section 4
@@ -271,4 +273,4 @@ Writing the plan (`docs/superpowers/plans/2026-10-19-gameplay.md`) surfaced one 
   - New `GameplayTuning` fields: `ResultsAbsent` 3.0 s (the Results row's `resultsAbsent`), `PresetPlayerCount` 1 and `PresetFrameCount` 3.
   - The default profile `DefaultProfiles.For(tuning)` uses: Right hand, `ArmLengthM` 0.60, `ShoulderWidthM` 0.38, `NeutralImageX` 0.5.
   - The assets live at `Assets/_Project/Config/Gameplay/GameplayTuning.asset` and `DifficultyCatalog.asset`.
-- **P-14 (components, §2):** five more `Core/` types: `RackDecision`, `PresenceTracker`, `PauseTracker`, `GamePublisher` and `LeaderboardWriter`.
+- **P-14 (components, §2):** seven more `Core/` types: `RackDecision`, `PresenceTracker`, `PauseTracker`, `GamePublisher`, `LeaderboardWriter`, `CalibrationRun` and `StateEntryActions`.
