@@ -1,6 +1,6 @@
 # Sub-project 6: Gameplay and Scoring
 
-- **Status:** Approved by Tejash on 2026-10-18
+- **Status:** Approved by Tejash on 2026-10-18; plan-time refinements approved on 2026-10-20 with the plan `docs/superpowers/plans/2026-10-19-gameplay.md`
 - **Date:** 2026-10-18
 - **Parent:** `2026-10-18-motion-bowling-system-design.md`
 - **Depends on:** 1 (foundation). Built entirely against `Bowling.Testing` fakes.
@@ -47,6 +47,11 @@ Modules/Gameplay/Runtime/
 │  ├─ ScoreCard.cs               ten-pin scoring for N frames (section 5)
 │  ├─ FrameRules.cs              pure: "is frame complete", "next rack" decisions
 │  ├─ SnapshotBuilder.cs         builds immutable GameSnapshot / PlayerSnapshot / FrameView
+│  ├─ RackDecision.cs            FrameRules result: frame complete, next rack, next rack fresh (P-2)
+│  ├─ PresenceTracker.cs         when presence last became false; AbsentFor(now) (P-3)
+│  ├─ PauseTracker.cs            resume state, deferred operator pause, absence seen while paused (P-5, P-6)
+│  ├─ GamePublisher.cs           raises the game events in the section 6 order, one subscriber at a time (P-8)
+│  ├─ LeaderboardWriter.cs       submits one LeaderboardEntry per player at GameOver (P-12)
 │  └─ DefaultProfiles.cs         fallback PlayerProfile when calibration fails twice
 └─ Config/
    ├─ GameplayTuning.cs          ScriptableObject: every timer in section 4
@@ -87,7 +92,7 @@ Every duration is a `GameplayTuning` field, with the default shown. Time comes f
 | Scoring | `ScoreCard.AddRoll(result.PinsKnocked)`; build and assign the new `Current` (State = Scoring); then raise `StateChanged(Scoring)`, `RollScored` and `SnapshotChanged`, in that order | `scoringHold` (1.5 s) elapses, or `scoringHoldReplay` (4.5 s) when the mark is a Strike or Spare (presentation replay 3.5 s or less, plus 1.0 s) | the next ball's AwaitReady; the next player's Calibrate or AwaitReady; or GameOver |
 | Paused | `throwSource.Disarm()`; remember the resume state | Presence true again: resume, re-entering that state (Calibrate restarts; AwaitReady re-arms); or `abandonAfterPause` (15 s) elapses; or `Resume()` | (resume state); Attract (no leaderboard entry); (resume state) |
 | GameOver | Submit one `LeaderboardEntry` per player | `gameOverHold` (2.0 s) elapses | Results |
-| Results | — | `resultsHold` (10 s) elapses; or presence false for 3 s; or `SelectMode(...)` ("Play again") | Attract; Attract; Calibrate (new game, same players count) |
+| Results | — | `resultsHold` (10 s) elapses; or presence false for `resultsAbsent` (3 s); or `SelectMode(...)` ("Play again") | Attract; Attract; Calibrate (new game, same players count) |
 
 **Pause rule.** In Calibrate, AwaitReady and AwaitThrow, presence false for `pauseAfterAbsent` (2.0 s) goes to Paused. PoseInput already debounces 1.0 s, so this is about 3 s of real absence. Rolling and Scoring never pause; the pause applies when the next state is entered.
 
@@ -138,10 +143,12 @@ Every duration is a `GameplayTuning` field, with the default shown. Time comes f
 
 | Mark | When |
 |---|---|
-| `Strike` | 10 on a full rack |
-| `Spare` | Clears the remaining pins on the frame's 2nd ball, or on the 3rd ball of the final frame after a non-strike ball 2 on a fresh rack |
+| `Strike` | 10 on a fresh rack (ball 1, or a final-frame reset) |
+| `Spare` | Clears every standing pin on a rack that is not fresh |
 | `Miss` | 0 pins |
 | `Count` | Anything else |
+
+A rack is *fresh* at ball 1, and after a final-frame reset (a strike or spare). Every other rack is a leftover.
 
 **`RollOutcome.Mark`** is the mark of the roll just added.
 
@@ -155,9 +162,11 @@ Every duration is a `GameplayTuning` field, with the default shown. Time comes f
 | All spares 5/5 | (5, 5) × 10 + 5 | 150 |
 | Strike/spare alternating | Frames 1–9 alternate X, 5/5 (X first); frame 10 = 5, 5, 10 | 200; every frame scores 20 |
 | Classic sample | 10, 7/3, 9/0, 10, 0/8, 8/2, 0/6, 10, 10, 10/8/1 | Cumulatives 20, 39, 48, 66, 74, 84, 90, 120, 148, 167 |
-| 3-frame perfect | 6 × 10 | 90 |
-| 5-frame perfect | 8 × 10 | 150 |
+| 3-frame perfect | 5 × 10 | 90 |
+| 5-frame perfect | 7 × 10 | 150 |
 | 3-frame open | (3, 4) × 3 | 21 |
+| Gutter then ten | 3 frames: 0, 10, 5, 0, 3, 4 | frame 1 marks Miss, Spare; total 27 |
+| Final X, 0, 10 | 3 frames: 0, 0, 0, 0, 10, 0, 10 | final marks Strike, Miss, Spare; total 20 |
 | Validation | 7 then 4 in one frame | `ArgumentOutOfRangeException` |
 | Validation | Roll after complete | `InvalidOperationException` |
 | Pending bonus | X, then 3 | `FrameScore(1) == null` until the next roll |
@@ -202,3 +211,64 @@ At GameOver, each player submits `LeaderboardEntry { DisplayName, Score = Runnin
 - **Recalibrate every turn in multiplayer,** with no identity check. Whoever steps in plays the current player's turn.
 - **ModeSelect auto-starts a 1-player, 3-frame game after 20 s,** so walk-up players who don't use the menu still get to play.
 - **No fouls, no splits shown.** Split marking is a possible later UI enhancement.
+
+## 11. Plan-time refinements (2026-10-19, approved with the plan)
+
+Writing the plan (`docs/superpowers/plans/2026-10-19-gameplay.md`) surfaced one error and several open points in sections 1 to 10. Each item is a decision the plan relies on. Where an item differs from an earlier section, this section wins.
+
+- **P-1 (error in §5):** an N-frame perfect game is N + 2 strikes.
+  - 3-frame perfect is **5 × 10** (90). 5-frame perfect is **7 × 10** (150).
+  - The earlier drafts of these two vectors had one strike too many. The extra roll would end in `InvalidOperationException`.
+- **P-2 (marks):** a rack is *fresh* at ball 1, and after a final-frame reset (a strike or spare).
+  - **Strike:** 10 pins on a fresh rack.
+  - **Spare:** clears every standing pin on a rack that isn't fresh. So `0, 10` is a Spare, and the final frame `X, 0, 10` reads Strike, Miss, Spare.
+  - **Miss:** 0 pins. **Count:** anything else.
+  - `FrameRules` takes freshness as an input, because a mask can't tell a fresh rack from one where ball 1 hit nothing.
+- **P-3 (absence and timers):**
+  - "Presence false for X" means continuous absence of at least X. It is measured from the moment presence last became false (`PresenceChanged`, with a poll each Tick as a backstop), and it carries across state changes. Presence returning resets it.
+  - Every timer fires on the first Tick at which the elapsed time is at least its duration.
+  - At most one timer-driven transition happens per Tick.
+- **P-4 (Calibrate):**
+  - `Begin()` runs on entry only if the player is present.
+  - Any Tick in Calibrate with the player present and no calibration running calls `Begin()`. That covers entering while absent, and the end of a `Failed(PlayerLeft)` or `Failed(TrackingLost)`.
+  - Only `Failed(Timeout)` counts toward the two-failure fallback. The count resets on every Calibrate entry, including a resume.
+  - A *turn-change* Calibrate uses `turnChangeWait` as its pause threshold. That is a new turn in a game of 2 or more players, not the first turn.
+- **P-5 (Paused):**
+  - On enter, Paused also calls `calibrator.Cancel()`.
+  - The resume state is the state it paused from, except that AwaitThrow resumes as AwaitReady, which re-arms.
+  - It resumes when the player is present after having been absent at some point during this pause, or on `Resume()`.
+  - It abandons to Attract after `abandonAfterPause` of absence, counted from the later of the pause entry and the start of the absence. So an operator pause with the player present lasts until `Resume()`.
+- **P-6 (operator commands):**
+  - `Pause()` in Rolling or Scoring is deferred to the first Tick after the next state is entered.
+  - Resuming into GameOver doesn't submit again: there is one submission per game.
+  - Attract on enter also calls `calibrator.Cancel()`.
+  - A command where it doesn't apply is ignored and logged `Info("Gameplay", "<Command> ignored in <State>")`: `SelectMode` outside ModeSelect and Results, `Pause` in Attract, Results or Paused, `Resume` outside Paused, and `Abandon` in Attract.
+  - `SelectMode` validates first, in any state: players 1–4, frames 3, 5 or 10, and a defined `Difficulty`. Anything else throws `ArgumentOutOfRangeException`.
+  - "Play again" is `SelectMode` in Results with whatever arguments the UI passes.
+- **P-7 (run to completion):**
+  - `Tick`, the four commands and every dependency event handler run to completion.
+  - A call that arrives while another is running is queued, and runs after it in call order. Examples: a subscriber calling `Abandon()` from `StateChanged`, or a dependency raising an event from inside a Gameplay call.
+  - So every transition raises its full event sequence before the next one begins.
+- **P-8 (subscriber isolation):** each subscriber of each event is invoked on its own. One that throws is logged as `Error("Gameplay", "<EventName> subscriber failed", exception)`, and the others still run.
+- **P-9 (scoring against the rack):**
+  - The pin count is `(rack & ~StandingAfter).Count()`, and the next rack comes from `rack & StandingAfter`.
+  - A `StandingBefore` that differs from the rack is logged as a warning.
+  - `RollOutcome.Result` is the simulator's result, unchanged.
+- **P-10 (unexpected inputs):**
+  - `Thrown` is also accepted in AwaitReady (the source passed Ready within one frame).
+  - `Rejected` in AwaitReady is ignored, because the source is already waiting.
+  - These are ignored and logged `Warn("Gameplay", "<Event> ignored in <State>")`: `Thrown` or `Rejected` anywhere else, `RollCompleted` outside Rolling, and `CalibrationCompleted` or `CalibrationFailed` outside Calibrate.
+- **P-11 (snapshots):**
+  - During Scoring, `CurrentPlayer`, `CurrentFrame` and `CurrentBall` name the roll just scored. They move on when Scoring ends.
+  - *Lobby* snapshots have no players, `CurrentPlayer` 0, `CurrentFrame` 1 and `CurrentBall` 1, with `FrameCount = PresetFrameCount` and `Difficulty` set to the preset difficulty. They are Attract, Join, ModeSelect, and Paused when paused from Join or ModeSelect.
+  - The preset difficulty is read from settings at construction and on each ModeSelect entry.
+  - Attract drops the session.
+  - The constructor enters Attract: it runs Attract's on-enter actions and assigns `Current`, but raises no events.
+- **P-12 (leaderboard):**
+  - All entries of one game share one `PlayedAtUtc`, from an injected `Func<DateTime> utcNow`.
+  - A `Submit` that throws is logged as an Error. The other entries are still submitted, and the game still reaches Results.
+- **P-13 (tuning):**
+  - New `GameplayTuning` fields: `ResultsAbsent` 3.0 s (the Results row's `resultsAbsent`), `PresetPlayerCount` 1 and `PresetFrameCount` 3.
+  - The default profile `DefaultProfiles.For(tuning)` uses: Right hand, `ArmLengthM` 0.60, `ShoulderWidthM` 0.38, `NeutralImageX` 0.5.
+  - The assets live at `Assets/_Project/Config/Gameplay/GameplayTuning.asset` and `DifficultyCatalog.asset`.
+- **P-14 (components, §2):** five more `Core/` types: `RackDecision`, `PresenceTracker`, `PauseTracker`, `GamePublisher` and `LeaderboardWriter`.
