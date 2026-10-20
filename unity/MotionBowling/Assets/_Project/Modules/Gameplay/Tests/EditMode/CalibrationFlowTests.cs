@@ -42,16 +42,48 @@ namespace Bowling.Gameplay.Tests
         [Test]
         public void CompletedCalibrationArmsTheThrowSource()
         {
-            _rig.PlayToFirstBall(1, 3, Difficulty.Standard);
+            _rig.StartGame(1, 3, Difficulty.Standard);
+            int bumpersBefore = _rig.Sim.SetBumpersCount;
+            int rackBefore = _rig.Sim.SetRackCount;
+
+            _rig.CompleteCalibration();
 
             Assert.AreEqual(GameState.AwaitReady, Current.State);
             Assert.AreEqual(1, _rig.Throws.ArmCount);
+            Assert.AreEqual(bumpersBefore + 1, _rig.Sim.SetBumpersCount, "AwaitReady sets the bumpers once");
+            Assert.AreEqual(rackBefore + 1, _rig.Sim.SetRackCount, "AwaitReady sets the rack once");
             AssertProfile(GameplayRig.Profile, _rig.Throws.LastContext.Player);
             Assert.AreEqual(Difficulty.Standard, _rig.Throws.LastContext.Difficulty.Level);
             Assert.AreEqual(0.25f, _rig.Throws.LastContext.Difficulty.Assist);
             Assert.IsFalse(_rig.Throws.LastContext.Difficulty.Bumpers);
             Assert.IsFalse(_rig.Sim.LastBumpers);
             Assert.AreEqual(PinMask.All, _rig.Sim.LastRack);
+        }
+
+        [Test]
+        public void BumpersAndRackAreSetBeforeTheSourceIsArmed()
+        {
+            _rig.StartGame(1, 3, Difficulty.Standard);
+            int bumpersBefore = _rig.Sim.SetBumpersCount;
+            int rackBefore = _rig.Sim.SetRackCount;
+            int bumpersAtArm = -1;
+            int rackAtArm = -1;
+
+            // The fake raises PhaseChanged synchronously inside Arm, so this sees the simulator as Arm found it.
+            _rig.Throws.PhaseChanged += phase =>
+            {
+                if (phase == SwingPhase.WaitingForReady)
+                {
+                    bumpersAtArm = _rig.Sim.SetBumpersCount;
+                    rackAtArm = _rig.Sim.SetRackCount;
+                }
+            };
+
+            _rig.CompleteCalibration();
+
+            Assert.AreEqual(1, _rig.Throws.ArmCount);
+            Assert.AreEqual(bumpersBefore + 1, bumpersAtArm, "SetBumpers ran before Arm");
+            Assert.AreEqual(rackBefore + 1, rackAtArm, "SetRack ran before Arm");
         }
 
         [Test]
