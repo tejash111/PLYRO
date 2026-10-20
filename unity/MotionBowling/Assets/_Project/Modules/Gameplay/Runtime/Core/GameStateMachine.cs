@@ -3,9 +3,11 @@ using Bowling.Contracts;
 namespace Bowling.Gameplay
 {
     /// <summary>
-    /// The game states, their transitions and timers (spec section 4, P-3 to P-6, P-11). Every transition sets the state
-    /// and its entry time, then publishes; <see cref="CalibrationRun"/> and <see cref="StateEntryActions"/> only run its
-    /// bookkeeping and side effects. Not re-entrant: <see cref="GameplayService"/> runs each call to completion (P-7).
+    /// The game states, their transitions and timers (spec section 4, P-3 to P-6, P-11). It hosts the per-phase flows
+    /// (<see cref="LobbyFlow"/>) and dispatches to them, and runs the Calibrate, ball and Scoring loop itself. Every
+    /// transition sets the state and its entry time, then publishes; <see cref="CalibrationRun"/> and
+    /// <see cref="StateEntryActions"/> only run its bookkeeping and side effects. Not re-entrant:
+    /// <see cref="GameplayService"/> runs each call to completion (P-7).
     /// </summary>
     internal sealed class GameStateMachine
     {
@@ -22,9 +24,8 @@ namespace Bowling.Gameplay
         private readonly PresenceTracker _presence;
         private readonly CalibrationRun _calibration;
         private readonly StateEntryActions _entry;
+        private readonly LobbyFlow _lobby;
 
-        private GameSession _session;           // null while no game is in progress (the lobby states)
-        private DifficultyProfile _preset;      // the settings' default difficulty (P-11)
         private double _enteredAt;              // clock time at which State was entered
         private MarkKind _scoredMark;           // the scored mark: a Strike or Spare holds Scoring longer, for the replay
 
@@ -48,12 +49,19 @@ namespace Bowling.Gameplay
             _presence = new PresenceTracker(input.IsPlayerPresent, clock.Now);
             _calibration = new CalibrationRun(calibrator);
             _entry = new StateEntryActions(throwSource, rollSimulator, tuning);
-            _preset = ReadPreset();
+            _lobby = new LobbyFlow(this, _presence, tuning);
+            Preset = ReadPreset();
             BeginState(GameState.Attract);
             _publisher.Seed(BuildSnapshot());
         }
 
         public GameState State { get; private set; }
+
+        /// <summary>The game in progress, for the flows. Null in the lobby states.</summary>
+        internal GameSession Session { get; private set; }
+
+        /// <summary>The settings' default difficulty (P-11), for the flows.</summary>
+        internal DifficultyProfile Preset { get; private set; }
 
         /// <summary>Polls presence (the P-3 backstop), then makes at most one transition.</summary>
         public void Tick()
@@ -64,13 +72,9 @@ namespace Bowling.Gameplay
             switch (State)
             {
                 case GameState.Attract:
-                    TickAttract();
-                    break;
                 case GameState.Join:
-                    TickJoin(now);
-                    break;
                 case GameState.ModeSelect:
-                    TickModeSelect(now);
+                    _lobby.Tick(now);
                     break;
                 case GameState.Calibrate:
                     _calibration.BeginIfIdle(_presence.IsPresent);    // P-4
@@ -92,7 +96,7 @@ namespace Bowling.Gameplay
             }
 
             _calibration.Completed();
-            _session.Current.Profile = profile;
+            Session.Current.Profile = profile;
             Enter(GameState.AwaitReady);
         }
 
@@ -113,7 +117,7 @@ namespace Bowling.Gameplay
                 return;
             }
 
-            _session.Current.Profile = DefaultProfiles.For(_tuning);
+            Session.Current.Profile = DefaultProfiles.For(_tuning);
             Enter(GameState.AwaitReady);
         }
 
@@ -168,15 +172,18 @@ namespace Bowling.Gameplay
         {
             if (State == GameState.Rolling)
             {
-                _scoredMark = _session.ScoreRoll(result);
+                _scoredMark = Session.ScoreRoll(result);
                 State = GameState.Scoring;
                 _enteredAt = _clock.Now;
-                var outcome = new RollOutcome(_session.CurrentPlayer, result, _scoredMark);
-                _publisher.PublishScoredRoll(SnapshotBuilder.InGame(GameState.Scoring, _session), outcome);
+                var outcome = new RollOutcome(Session.CurrentPlayer, result, _scoredMark);
+                _publisher.PublishScoredRoll(SnapshotBuilder.InGame(GameState.Scoring, Session), outcome);
             }
         }
 
-        /// <summary>Starts a new game in ModeSelect. The service has already validated the arguments (P-6).</summary>
+        /// <summary>
+        /// ModeSelect hands the choice to <see cref="LobbyFlow"/>; every other state ignores it (P-6). The service has
+        /// already validated the arguments.
+        /// </summary>
         public void SelectMode(int playerCount, int frameCount, Difficulty difficulty)
         {
             if (State != GameState.ModeSelect)
@@ -185,7 +192,7 @@ namespace Bowling.Gameplay
                 return;
             }
 
-            StartGame(playerCount, frameCount, _difficulties.For(difficulty));
+            _lobby.SelectMode(playerCount, frameCount, _difficulties.For(difficulty));
         }
 
         // No state takes these yet, so each is ignored with the P-6 log.
@@ -195,11 +202,21 @@ namespace Bowling.Gameplay
 
         public void Abandon() => Ignore(nameof(Abandon));
 
-        // A transition: the state, its entry time and on-enter actions, then the R21 events.
-        private void Enter(GameState state)
+        /// <summary>Seconds since <see cref="State"/> was entered, at <paramref name="now"/>.</summary>
+        internal double TimeInState(double now) => now - _enteredAt;
+
+        /// <summary>A transition: the state, its entry time and on-enter actions, then the R21 events.</summary>
+        internal void Enter(GameState state)
         {
             BeginState(state);
             _publisher.PublishState(BuildSnapshot());
+        }
+
+        /// <summary>A new game of the given mode, which starts with the first player's Calibrate.</summary>
+        internal void StartGame(int playerCount, int frameCount, DifficultyProfile difficulty)
+        {
+            Session = new GameSession(playerCount, frameCount, difficulty);
+            Enter(GameState.Calibrate);
         }
 
         // Everything a transition does except publishing, which the constructor replaces with a quiet Seed.
@@ -214,84 +231,43 @@ namespace Bowling.Gameplay
                     // Disarm and the Attract guard, then the calibrator stops (P-6). Attract drops the session.
                     _entry.EnterAttract();
                     _calibration.Cancel();
-                    _session = null;
+                    Session = null;
                     break;
                 case GameState.ModeSelect:
-                    _preset = ReadPreset();
+                    Preset = ReadPreset();
                     break;
                 case GameState.Calibrate:
                     _calibration.Restart(_presence.IsPresent);
                     break;
                 case GameState.AwaitReady:
-                    _entry.EnterAwaitReady(_session);
+                    _entry.EnterAwaitReady(Session);
                     break;
-            }
-        }
-
-        private void TickAttract()
-        {
-            if (_presence.IsPresent)
-            {
-                Enter(GameState.Join);
-            }
-        }
-
-        private void TickJoin(double now)
-        {
-            if (!_presence.IsPresent)
-            {
-                Enter(GameState.Attract);
-            }
-            else if (Elapsed(now) >= _tuning.JoinGreeting)
-            {
-                Enter(GameState.ModeSelect);
-            }
-        }
-
-        // Absence wins over the timeout; the timeout auto-selects the preset only with the player present.
-        private void TickModeSelect(double now)
-        {
-            if (_presence.AbsentFor(now) >= _tuning.ModeSelectAbsent)
-            {
-                Enter(GameState.Attract);
-            }
-            else if (_presence.IsPresent && Elapsed(now) >= _tuning.ModeSelectTimeout)
-            {
-                StartGame(_tuning.PresetPlayerCount, _tuning.PresetFrameCount, _preset);
             }
         }
 
         private void TickScoring(double now)
         {
             bool replay = _scoredMark == MarkKind.Strike || _scoredMark == MarkKind.Spare;
-            if (Elapsed(now) < (replay ? _tuning.ScoringHoldReplay : _tuning.ScoringHold))
+            if (TimeInState(now) < (replay ? _tuning.ScoringHoldReplay : _tuning.ScoringHold))
             {
                 return;
             }
 
-            if (_session.IsOver)
+            if (Session.IsOver)
             {
                 Enter(GameState.GameOver);      // without Advance, which throws once every card is complete
                 return;
             }
 
-            _session.Advance();
+            Session.Advance();
             Enter(GameState.AwaitReady);
         }
 
-        private void StartGame(int playerCount, int frameCount, DifficultyProfile difficulty)
-        {
-            _session = new GameSession(playerCount, frameCount, difficulty);
-            Enter(GameState.Calibrate);
-        }
-
-        private GameSnapshot BuildSnapshot() => _session != null
-            ? SnapshotBuilder.InGame(State, _session)
-            : SnapshotBuilder.Lobby(State, _tuning.PresetFrameCount, _preset);
+        private GameSnapshot BuildSnapshot() => Session != null
+            ? SnapshotBuilder.InGame(State, Session)
+            : SnapshotBuilder.Lobby(State, _tuning.PresetFrameCount, Preset);
 
         private DifficultyProfile ReadPreset() => _difficulties.For(_settings.Load().DefaultDifficulty);
-
-        private double Elapsed(double now) => now - _enteredAt;
 
         // P-6: a command where it doesn't apply.
         private void Ignore(string command) => _log.Info(LogCategory, command + " ignored in " + State);
