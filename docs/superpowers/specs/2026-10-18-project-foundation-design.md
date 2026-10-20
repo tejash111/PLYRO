@@ -228,7 +228,7 @@ Every one of these is a plain C# class implementing a Contracts interface. Each 
 | `RecordingGameLog` | `IGameLog` | Exposes the logged entries |
 | `InMemoryLeaderboardStore` | `ILeaderboardStore` | — |
 | `InMemorySettingsStore` | `ISettingsStore` | — |
-| `FakeGameEvents` | `IGameEvents` | `SetState(GameState)` raises `StateChanged` then `SnapshotChanged`; `Publish(GameSnapshot)`; `RaiseRollScored(RollOutcome)` |
+| `FakeGameEvents` | `IGameEvents` | `SetState(GameState)` raises `StateChanged` then `SnapshotChanged`; `Publish(GameSnapshot)`; `RaiseRollScored(RollOutcome)`; `PublishScoredRoll(GameSnapshot, RollOutcome)` raises `StateChanged` (when the state changes), `RollScored`, `SnapshotChanged` (R22) |
 | `FakeGameCommands` | `IGameCommands` | Records every call and its arguments |
 | `FakeHandCursor` | `IHandCursor` | `Set(bool active, Vector2 position)` |
 | `FakeCameraPreview` | `ICameraPreview` | `Set(Texture)` |

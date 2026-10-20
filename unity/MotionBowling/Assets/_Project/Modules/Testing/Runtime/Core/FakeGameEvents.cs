@@ -62,6 +62,26 @@ namespace Bowling.Testing
             SnapshotChanged?.Invoke(snapshot);
         }
 
+        // Makes the snapshot Current, then raises StateChanged if its State differs from the previous snapshot's (as
+        // Publish does), then RollScored(outcome), then SnapshotChanged: the R22 order of a scored roll.
+        public void PublishScoredRoll(GameSnapshot snapshot, RollOutcome outcome)
+        {
+            if (snapshot == null)
+            {
+                throw new ArgumentNullException(nameof(snapshot));
+            }
+
+            GameState previousState = Current.State;
+            Current = snapshot;
+            if (snapshot.State != previousState)
+            {
+                StateChanged?.Invoke(snapshot.State);
+            }
+
+            RollScored?.Invoke(outcome);
+            SnapshotChanged?.Invoke(snapshot);
+        }
+
         public void RaiseRollScored(RollOutcome outcome)
         {
             RollScored?.Invoke(outcome);

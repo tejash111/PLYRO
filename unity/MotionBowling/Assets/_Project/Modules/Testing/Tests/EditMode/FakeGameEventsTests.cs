@@ -154,6 +154,45 @@ namespace Bowling.Testing.Tests
         }
 
         [Test]
+        public void PublishScoredRollRaisesInR22Order()
+        {
+            var events = new FakeGameEvents();
+            events.Publish(Snapshot());
+            List<string> log = Record(events);
+            GameSnapshot scoring = Snapshot();
+            scoring.State = GameState.Scoring;
+
+            events.PublishScoredRoll(scoring, new RollOutcome(1, default, MarkKind.Strike));
+
+            Assert.AreSame(scoring, events.Current);
+            Assert.That(log, Is.EqualTo(new[] { "StateChanged:Scoring:Scoring", "RollScored:1:Strike", "SnapshotChanged:Scoring:True" }),
+                "AwaitThrow to Scoring is a state change; Current is already replaced inside every handler");
+        }
+
+        [Test]
+        public void PublishScoredRollInTheSameStateSkipsStateChanged()
+        {
+            var events = new FakeGameEvents();
+            GameSnapshot scoring = Snapshot();
+            scoring.State = GameState.Scoring;
+            events.Publish(scoring);
+            List<string> log = Record(events);
+            GameSnapshot next = Snapshot();
+            next.State = GameState.Scoring;
+
+            events.PublishScoredRoll(next, new RollOutcome(1, default, MarkKind.Strike));
+
+            Assert.AreSame(next, events.Current);
+            Assert.That(log, Is.EqualTo(new[] { "RollScored:1:Strike", "SnapshotChanged:Scoring:True" }));
+        }
+
+        [Test]
+        public void PublishScoredRollRejectsNull()
+        {
+            Assert.Throws<ArgumentNullException>(() => new FakeGameEvents().PublishScoredRoll(null, default));
+        }
+
+        [Test]
         public void PublishRejectsNull()
         {
             Assert.Throws<ArgumentNullException>(() => new FakeGameEvents().Publish(null));

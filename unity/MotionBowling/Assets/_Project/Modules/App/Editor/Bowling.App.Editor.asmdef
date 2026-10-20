@@ -2,7 +2,8 @@
     "name": "Bowling.App.Editor",
     "rootNamespace": "Bowling.App.Editor",
     "references": [
-        "Bowling.App"
+        "Bowling.App",
+        "Bowling.Gameplay"
     ],
     "includePlatforms": [
         "Editor"

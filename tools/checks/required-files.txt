@@ -1,3 +1,5 @@
 # Files that must exist, one path per line, relative to the repo root.
 # tools/ci/verify.sh (step 6) fails if any listed path is missing. Blank lines and lines
-# starting with # are ignored. This file starts with no entries; later sub-projects append theirs.
+# starting with # are ignored. Each sub-project appends its own entries.
+unity/MotionBowling/Assets/_Project/Config/Gameplay/GameplayTuning.asset
+unity/MotionBowling/Assets/_Project/Config/Gameplay/DifficultyCatalog.asset
