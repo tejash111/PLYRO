@@ -28,6 +28,9 @@ namespace Bowling.Gameplay
         private readonly Action<PlayerProfile> _calibrationCompleted;
         private readonly Action<CalibrationFailure> _calibrationFailed;
         private readonly Action<SwingPhase> _phaseChanged;
+        private readonly Action<ThrowEvent> _thrown;
+        private readonly Action<ThrowRejection> _rejected;
+        private readonly Action<RollResult> _rollCompleted;
 
         /// <summary>Starts in Attract without raising anything (P-11). Throws ArgumentNullException for a null argument.</summary>
         public GameplayService(IPlayerInput input, IPlayerCalibrator calibrator, IThrowSource throwSource,
@@ -60,11 +63,17 @@ namespace Bowling.Gameplay
             _calibrationCompleted = _machine.OnCalibrationCompleted;
             _calibrationFailed = _machine.OnCalibrationFailed;
             _phaseChanged = _machine.OnPhaseChanged;
+            _thrown = _machine.OnThrown;
+            _rejected = _machine.OnRejected;
+            _rollCompleted = _machine.OnRollCompleted;
 
             input.PresenceChanged += OnPresenceChanged;
             calibrator.Completed += OnCalibrationCompleted;
             calibrator.Failed += OnCalibrationFailed;
             throwSource.PhaseChanged += OnPhaseChanged;
+            throwSource.Thrown += OnThrown;
+            throwSource.Rejected += OnRejected;
+            rollSimulator.Completed += OnRollCompleted;
         }
 
         /// <summary>The latest snapshot. Never null: the constructor seeds it.</summary>
@@ -116,6 +125,12 @@ namespace Bowling.Gameplay
         private void OnCalibrationFailed(CalibrationFailure reason) => Run(_calibrationFailed, reason);
 
         private void OnPhaseChanged(SwingPhase phase) => Run(_phaseChanged, phase);
+
+        private void OnThrown(ThrowEvent throwEvent) => Run(_thrown, throwEvent);
+
+        private void OnRejected(ThrowRejection reason) => Run(_rejected, reason);
+
+        private void OnRollCompleted(RollResult result) => Run(_rollCompleted, result);
 
         // The run-to-completion gate (P-7). If a body throws, the calls it queued are dropped and the gate reopens.
         private void Run(Action body)

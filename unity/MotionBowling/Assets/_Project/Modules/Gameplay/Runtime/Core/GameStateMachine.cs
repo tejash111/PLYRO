@@ -3,10 +3,9 @@ using Bowling.Contracts;
 namespace Bowling.Gameplay
 {
     /// <summary>
-    /// The game states, their on-enter actions and their timers (spec section 4, P-3 to P-6, P-11). Every transition
-    /// sets the state and its entry time, then publishes the new snapshot. The machine makes every transition itself;
-    /// <see cref="CalibrationRun"/> and <see cref="StateEntryActions"/> only keep the bookkeeping and run the side
-    /// effects. Not re-entrant on its own: <see cref="GameplayService"/> runs every call to it to completion (P-7).
+    /// The game states, their transitions and timers (spec section 4, P-3 to P-6, P-11). Every transition sets the state
+    /// and its entry time, then publishes; <see cref="CalibrationRun"/> and <see cref="StateEntryActions"/> only run its
+    /// bookkeeping and side effects. Not re-entrant: <see cref="GameplayService"/> runs each call to completion (P-7).
     /// </summary>
     internal sealed class GameStateMachine
     {
@@ -27,6 +26,7 @@ namespace Bowling.Gameplay
         private GameSession _session;           // null while no game is in progress (the lobby states)
         private DifficultyProfile _preset;      // the settings' default difficulty (P-11)
         private double _enteredAt;              // clock time at which State was entered
+        private MarkKind _scoredMark;           // the scored mark: a Strike or Spare holds Scoring longer, for the replay
 
         /// <summary>
         /// Enters Attract quietly (P-11): runs its on-enter actions and seeds <c>Current</c>, raising nothing.
@@ -74,6 +74,9 @@ namespace Bowling.Gameplay
                     break;
                 case GameState.Calibrate:
                     _calibration.BeginIfIdle(_presence.IsPresent);    // P-4
+                    break;
+                case GameState.Scoring:
+                    TickScoring(now);
                     break;
             }
         }
@@ -129,6 +132,47 @@ namespace Bowling.Gameplay
             if (phase == SwingPhase.Ready || phase == SwingPhase.Backswing || phase == SwingPhase.ForwardSwing)
             {
                 Enter(GameState.AwaitThrow);
+            }
+        }
+
+        /// <summary>
+        /// AwaitThrow, or AwaitReady when the source passed Ready within one frame (P-10): rolls the throw as it came,
+        /// camera-clock timestamp included, and enters Rolling.
+        /// </summary>
+        public void OnThrown(ThrowEvent throwEvent)
+        {
+            if (State == GameState.AwaitThrow || State == GameState.AwaitReady)
+            {
+                _sim.Roll(throwEvent);
+                Enter(GameState.Rolling);
+            }
+        }
+
+        /// <summary>
+        /// AwaitThrow only: the swing was aborted, so AwaitReady is entered again, which re-arms without using the ball.
+        /// AwaitReady ignores it: the source is already waiting (P-10).
+        /// </summary>
+        public void OnRejected(ThrowRejection reason)
+        {
+            if (State == GameState.AwaitThrow)
+            {
+                Enter(GameState.AwaitReady);
+            }
+        }
+
+        /// <summary>
+        /// Rolling only: scores the result, then enters Scoring without <see cref="Enter"/>, because a scored roll
+        /// publishes its own event order (R22). The snapshot still names the roll just scored (P-11).
+        /// </summary>
+        public void OnRollCompleted(RollResult result)
+        {
+            if (State == GameState.Rolling)
+            {
+                _scoredMark = _session.ScoreRoll(result);
+                State = GameState.Scoring;
+                _enteredAt = _clock.Now;
+                var outcome = new RollOutcome(_session.CurrentPlayer, result, _scoredMark);
+                _publisher.PublishScoredRoll(SnapshotBuilder.InGame(GameState.Scoring, _session), outcome);
             }
         }
 
@@ -217,18 +261,33 @@ namespace Bowling.Gameplay
             }
         }
 
+        private void TickScoring(double now)
+        {
+            bool replay = _scoredMark == MarkKind.Strike || _scoredMark == MarkKind.Spare;
+            if (Elapsed(now) < (replay ? _tuning.ScoringHoldReplay : _tuning.ScoringHold))
+            {
+                return;
+            }
+
+            if (_session.IsOver)
+            {
+                Enter(GameState.GameOver);      // without Advance, which throws once every card is complete
+                return;
+            }
+
+            _session.Advance();
+            Enter(GameState.AwaitReady);
+        }
+
         private void StartGame(int playerCount, int frameCount, DifficultyProfile difficulty)
         {
             _session = new GameSession(playerCount, frameCount, difficulty);
             Enter(GameState.Calibrate);
         }
 
-        private GameSnapshot BuildSnapshot()
-        {
-            return _session != null
-                ? SnapshotBuilder.InGame(State, _session)
-                : SnapshotBuilder.Lobby(State, _tuning.PresetFrameCount, _preset);
-        }
+        private GameSnapshot BuildSnapshot() => _session != null
+            ? SnapshotBuilder.InGame(State, _session)
+            : SnapshotBuilder.Lobby(State, _tuning.PresetFrameCount, _preset);
 
         private DifficultyProfile ReadPreset() => _difficulties.For(_settings.Load().DefaultDifficulty);
 
