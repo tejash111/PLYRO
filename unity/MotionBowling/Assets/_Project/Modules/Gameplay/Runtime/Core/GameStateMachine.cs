@@ -4,17 +4,16 @@ namespace Bowling.Gameplay
 {
     /// <summary>
     /// The game states, their transitions and timers (spec section 4, P-3 to P-6, P-11). It hosts the per-phase flows
-    /// (<see cref="LobbyFlow"/>, <see cref="GameEndFlow"/>), and runs the Calibrate, ball and Scoring loop and the turn
-    /// changes itself. Every transition sets the state and its entry time, then publishes; <see cref="CalibrationRun"/>
-    /// and <see cref="StateEntryActions"/> only run its bookkeeping and side effects. Not re-entrant:
-    /// <see cref="GameplayService"/> runs each call to completion (P-7).
+    /// (<see cref="LobbyFlow"/>, <see cref="TurnFlow"/>, <see cref="GameEndFlow"/>), and runs the Scoring hold and the
+    /// turn changes itself. Every transition sets the state and its entry time, then publishes;
+    /// <see cref="CalibrationRun"/> and <see cref="StateEntryActions"/> only run its bookkeeping and side effects. Not
+    /// re-entrant: <see cref="GameplayService"/> runs each call to completion (P-7).
     /// </summary>
     internal sealed class GameStateMachine
     {
         private const string LogCategory = "Gameplay";
 
         private readonly IPlayerInput _input;
-        private readonly IRollSimulator _sim;
         private readonly ISettingsStore _settings;
         private readonly IClock _clock;
         private readonly IGameLog _log;
@@ -26,6 +25,7 @@ namespace Bowling.Gameplay
         private readonly StateEntryActions _entry;
         private readonly LobbyFlow _lobby;
         private readonly GameEndFlow _end;
+        private readonly TurnFlow _turn;
 
         private double _enteredAt;              // clock time at which State was entered
         private MarkKind _scoredMark;           // the scored mark: a Strike or Spare holds Scoring longer, for the replay
@@ -39,7 +39,6 @@ namespace Bowling.Gameplay
             GameplayTuning tuning, DifficultyCatalog difficulties, GamePublisher publisher, LeaderboardWriter leaderboard)
         {
             _input = input;
-            _sim = rollSimulator;
             _settings = settings;
             _clock = clock;
             _log = log;
@@ -52,6 +51,7 @@ namespace Bowling.Gameplay
             _entry = new StateEntryActions(throwSource, rollSimulator, tuning);
             _lobby = new LobbyFlow(this, _presence, tuning);
             _end = new GameEndFlow(this, _presence, tuning, leaderboard);
+            _turn = new TurnFlow(this, _presence, tuning, rollSimulator, _calibration);
             Preset = ReadPreset();
             BeginState(GameState.Attract);
             _publisher.Seed(BuildSnapshot());
@@ -96,98 +96,18 @@ namespace Bowling.Gameplay
 
         public void OnPresenceChanged(bool present) => _presence.Observe(present, _clock.Now);
 
-        /// <summary>Calibrate only: the profile goes to the current player, then the game is ready for the first ball.</summary>
-        public void OnCalibrationCompleted(PlayerProfile profile)
-        {
-            if (State != GameState.Calibrate)
-            {
-                return;
-            }
+        // The dependency events of a turn, all handled by TurnFlow.
+        public void OnCalibrationCompleted(PlayerProfile profile) => _turn.OnCalibrationCompleted(profile);
 
-            _calibration.Completed();
-            Session.Current.Profile = profile;
-            Enter(GameState.AwaitReady);
-        }
+        public void OnCalibrationFailed(CalibrationFailure reason) => _turn.OnCalibrationFailed(reason);
 
-        /// <summary>
-        /// Calibrate only (P-4). Only a Timeout counts: the first one starts over, the second falls back to the default
-        /// profile. PlayerLeft and TrackingLost just end the calibration, and the next Tick with the player present begins
-        /// another.
-        /// </summary>
-        public void OnCalibrationFailed(CalibrationFailure reason)
-        {
-            if (State != GameState.Calibrate)
-            {
-                return;
-            }
+        public void OnPhaseChanged(SwingPhase phase) => _turn.OnPhaseChanged(phase);
 
-            if (!_calibration.Failed(reason, _presence.IsPresent))
-            {
-                return;
-            }
+        public void OnThrown(ThrowEvent throwEvent) => _turn.OnThrown(throwEvent);
 
-            Session.Current.Profile = DefaultProfiles.For(_tuning);
-            Enter(GameState.AwaitReady);
-        }
+        public void OnRejected(ThrowRejection reason) => _turn.OnRejected(reason);
 
-        /// <summary>
-        /// AwaitReady only: the source has left its waiting phase and the swing is under way. Every other phase is
-        /// ignored, silently: <c>Arm</c> and <c>Disarm</c> raise <c>PhaseChanged</c> too, and it reaches this method
-        /// right after the call that caused it (P-7).
-        /// </summary>
-        public void OnPhaseChanged(SwingPhase phase)
-        {
-            if (State != GameState.AwaitReady)
-            {
-                return;
-            }
-
-            if (phase == SwingPhase.Ready || phase == SwingPhase.Backswing || phase == SwingPhase.ForwardSwing)
-            {
-                Enter(GameState.AwaitThrow);
-            }
-        }
-
-        /// <summary>
-        /// AwaitThrow, or AwaitReady when the source passed Ready within one frame (P-10): rolls the throw as it came,
-        /// camera-clock timestamp included, and enters Rolling.
-        /// </summary>
-        public void OnThrown(ThrowEvent throwEvent)
-        {
-            if (State == GameState.AwaitThrow || State == GameState.AwaitReady)
-            {
-                _sim.Roll(throwEvent);
-                Enter(GameState.Rolling);
-            }
-        }
-
-        /// <summary>
-        /// AwaitThrow only: the swing was aborted, so AwaitReady is entered again, which re-arms without using the ball.
-        /// AwaitReady ignores it: the source is already waiting (P-10).
-        /// </summary>
-        public void OnRejected(ThrowRejection reason)
-        {
-            if (State == GameState.AwaitThrow)
-            {
-                Enter(GameState.AwaitReady);
-            }
-        }
-
-        /// <summary>
-        /// Rolling only: scores the result, then enters Scoring without <see cref="Enter"/>, because a scored roll
-        /// publishes its own event order (R22). The snapshot still names the roll just scored (P-11).
-        /// </summary>
-        public void OnRollCompleted(RollResult result)
-        {
-            if (State == GameState.Rolling)
-            {
-                _scoredMark = Session.ScoreRoll(result);
-                State = GameState.Scoring;
-                _enteredAt = _clock.Now;
-                var outcome = new RollOutcome(Session.CurrentPlayer, result, _scoredMark);
-                _publisher.PublishScoredRoll(SnapshotBuilder.InGame(GameState.Scoring, Session), outcome);
-            }
-        }
+        public void OnRollCompleted(RollResult result) => _turn.OnRollCompleted(result);
 
         /// <summary>
         /// ModeSelect hands the choice to <see cref="LobbyFlow"/>, and Results ("play again") to <see cref="GameEndFlow"/>;
@@ -224,6 +144,18 @@ namespace Bowling.Gameplay
         {
             BeginState(state);
             _publisher.PublishState(BuildSnapshot());
+        }
+
+        /// <summary>
+        /// Enters Scoring without <see cref="Enter"/>, because a scored roll publishes its own event order (R22). The
+        /// snapshot still names the roll just scored (P-11), and the outcome's mark sets the hold.
+        /// </summary>
+        internal void EnterScoring(RollOutcome outcome)
+        {
+            State = GameState.Scoring;
+            _enteredAt = _clock.Now;
+            _scoredMark = outcome.Mark;
+            _publisher.PublishScoredRoll(SnapshotBuilder.InGame(GameState.Scoring, Session), outcome);
         }
 
         /// <summary>A new game of the given mode, which starts with the first player's Calibrate.</summary>
@@ -290,7 +222,7 @@ namespace Bowling.Gameplay
 
         private DifficultyProfile ReadPreset() => _difficulties.For(_settings.Load().DefaultDifficulty);
 
-        // P-6: a command where it doesn't apply.
-        private void Ignore(string command) => _log.Info(LogCategory, command + " ignored in " + State);
+        /// <summary>P-6: a command where it doesn't apply, logged for the flows too.</summary>
+        internal void Ignore(string command) => _log.Info(LogCategory, command + " ignored in " + State);
     }
 }
