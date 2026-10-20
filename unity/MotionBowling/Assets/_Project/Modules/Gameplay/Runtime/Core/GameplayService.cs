@@ -51,8 +51,9 @@ namespace Bowling.Gameplay
 
             _difficulties = difficulties;
             _publisher = new GamePublisher(log);
-            _machine = new GameStateMachine(
-                input, calibrator, throwSource, rollSimulator, settings, clock, log, tuning, difficulties, _publisher);
+            var leaderboardWriter = new LeaderboardWriter(leaderboard, log, utcNow);
+            _machine = new GameStateMachine(input, calibrator, throwSource, rollSimulator, settings, clock, log, tuning,
+                difficulties, _publisher, leaderboardWriter);
 
             _tick = _machine.Tick;
             _selectMode = mode => _machine.SelectMode(mode.Players, mode.Frames, mode.Difficulty);
@@ -78,6 +79,9 @@ namespace Bowling.Gameplay
 
         /// <summary>The latest snapshot. Never null: the constructor seeds it.</summary>
         public GameSnapshot Current => _publisher.Current;
+
+        /// <summary>Whether the current Calibrate is a turn change (P-4), as the state machine keeps it. For the tests.</summary>
+        internal bool IsTurnChange => _machine.IsTurnChange;
 
         public event Action<GameState> StateChanged
         {

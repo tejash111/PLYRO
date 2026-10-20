@@ -4,9 +4,9 @@ namespace Bowling.Gameplay
 {
     /// <summary>
     /// The game states, their transitions and timers (spec section 4, P-3 to P-6, P-11). It hosts the per-phase flows
-    /// (<see cref="LobbyFlow"/>) and dispatches to them, and runs the Calibrate, ball and Scoring loop itself. Every
-    /// transition sets the state and its entry time, then publishes; <see cref="CalibrationRun"/> and
-    /// <see cref="StateEntryActions"/> only run its bookkeeping and side effects. Not re-entrant:
+    /// (<see cref="LobbyFlow"/>, <see cref="GameEndFlow"/>), and runs the Calibrate, ball and Scoring loop and the turn
+    /// changes itself. Every transition sets the state and its entry time, then publishes; <see cref="CalibrationRun"/>
+    /// and <see cref="StateEntryActions"/> only run its bookkeeping and side effects. Not re-entrant:
     /// <see cref="GameplayService"/> runs each call to completion (P-7).
     /// </summary>
     internal sealed class GameStateMachine
@@ -25,6 +25,7 @@ namespace Bowling.Gameplay
         private readonly CalibrationRun _calibration;
         private readonly StateEntryActions _entry;
         private readonly LobbyFlow _lobby;
+        private readonly GameEndFlow _end;
 
         private double _enteredAt;              // clock time at which State was entered
         private MarkKind _scoredMark;           // the scored mark: a Strike or Spare holds Scoring longer, for the replay
@@ -35,7 +36,7 @@ namespace Bowling.Gameplay
         /// </summary>
         public GameStateMachine(IPlayerInput input, IPlayerCalibrator calibrator, IThrowSource throwSource,
             IRollSimulator rollSimulator, ISettingsStore settings, IClock clock, IGameLog log,
-            GameplayTuning tuning, DifficultyCatalog difficulties, GamePublisher publisher)
+            GameplayTuning tuning, DifficultyCatalog difficulties, GamePublisher publisher, LeaderboardWriter leaderboard)
         {
             _input = input;
             _sim = rollSimulator;
@@ -50,6 +51,7 @@ namespace Bowling.Gameplay
             _calibration = new CalibrationRun(calibrator);
             _entry = new StateEntryActions(throwSource, rollSimulator, tuning);
             _lobby = new LobbyFlow(this, _presence, tuning);
+            _end = new GameEndFlow(this, _presence, tuning, leaderboard);
             Preset = ReadPreset();
             BeginState(GameState.Attract);
             _publisher.Seed(BuildSnapshot());
@@ -62,6 +64,9 @@ namespace Bowling.Gameplay
 
         /// <summary>The settings' default difficulty (P-11), for the flows.</summary>
         internal DifficultyProfile Preset { get; private set; }
+
+        /// <summary>This Calibrate is a turn change (P-4). Entering AwaitReady or Attract, and a new game, clear it.</summary>
+        internal bool IsTurnChange { get; private set; }
 
         /// <summary>Polls presence (the P-3 backstop), then makes at most one transition.</summary>
         public void Tick()
@@ -81,6 +86,10 @@ namespace Bowling.Gameplay
                     break;
                 case GameState.Scoring:
                     TickScoring(now);
+                    break;
+                case GameState.GameOver:
+                case GameState.Results:
+                    _end.Tick(now);
                     break;
             }
         }
@@ -181,18 +190,23 @@ namespace Bowling.Gameplay
         }
 
         /// <summary>
-        /// ModeSelect hands the choice to <see cref="LobbyFlow"/>; every other state ignores it (P-6). The service has
-        /// already validated the arguments.
+        /// ModeSelect hands the choice to <see cref="LobbyFlow"/>, and Results ("play again") to <see cref="GameEndFlow"/>;
+        /// every other state ignores it (P-6). The service has already validated the arguments.
         /// </summary>
         public void SelectMode(int playerCount, int frameCount, Difficulty difficulty)
         {
-            if (State != GameState.ModeSelect)
+            switch (State)
             {
-                Ignore(nameof(SelectMode));
-                return;
+                case GameState.ModeSelect:
+                    _lobby.SelectMode(playerCount, frameCount, _difficulties.For(difficulty));
+                    break;
+                case GameState.Results:
+                    _end.PlayAgain(playerCount, frameCount, _difficulties.For(difficulty));
+                    break;
+                default:
+                    Ignore(nameof(SelectMode));
+                    break;
             }
-
-            _lobby.SelectMode(playerCount, frameCount, _difficulties.For(difficulty));
         }
 
         // No state takes these yet, so each is ignored with the P-6 log.
@@ -216,6 +230,7 @@ namespace Bowling.Gameplay
         internal void StartGame(int playerCount, int frameCount, DifficultyProfile difficulty)
         {
             Session = new GameSession(playerCount, frameCount, difficulty);
+            IsTurnChange = false;
             Enter(GameState.Calibrate);
         }
 
@@ -232,6 +247,7 @@ namespace Bowling.Gameplay
                     _entry.EnterAttract();
                     _calibration.Cancel();
                     Session = null;
+                    IsTurnChange = false;
                     break;
                 case GameState.ModeSelect:
                     Preset = ReadPreset();
@@ -240,7 +256,11 @@ namespace Bowling.Gameplay
                     _calibration.Restart(_presence.IsPresent);
                     break;
                 case GameState.AwaitReady:
+                    IsTurnChange = false;
                     _entry.EnterAwaitReady(Session);
+                    break;
+                case GameState.GameOver:
+                    _end.EnterGameOver();
                     break;
             }
         }
@@ -259,8 +279,9 @@ namespace Bowling.Gameplay
                 return;
             }
 
-            Session.Advance();
-            Enter(GameState.AwaitReady);
+            // A new turn with 2 or more players hands the lane over: the next player steps in and calibrates (P-4).
+            IsTurnChange = Session.Advance() && Session.Players.Count > 1;
+            Enter(IsTurnChange ? GameState.Calibrate : GameState.AwaitReady);
         }
 
         private GameSnapshot BuildSnapshot() => Session != null

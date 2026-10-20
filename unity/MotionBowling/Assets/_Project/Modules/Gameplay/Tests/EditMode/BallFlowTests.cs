@@ -126,6 +126,30 @@ namespace Bowling.Gameplay.Tests
         }
 
         [Test]
+        public void ScoringHoldCountsFromTheRollsEnd()
+        {
+            _rig.PlayToFirstBall();
+            _rig.Throws.SetPhase(SwingPhase.Ready);
+            _rig.Throws.EmitThrow(GameplayRig.Throw);
+
+            _rig.Wait(2.0);
+
+            Assert.AreEqual(GameState.Rolling, Current.State, "Rolling has no timer");
+
+            _rig.Sim.CompleteWith(PinMask.P8 | PinMask.P9 | PinMask.P10);
+
+            Assert.AreEqual(GameState.Scoring, Current.State);
+
+            _rig.Wait(1.25);
+
+            Assert.AreEqual(GameState.Scoring, Current.State, "the hold starts when the roll ends, not when it began");
+
+            _rig.Wait(0.25);
+
+            Assert.AreEqual(GameState.AwaitReady, Current.State);
+        }
+
+        [Test]
         public void ARejectedSwingReArmsWithoutUsingTheBall()
         {
             _rig.PlayToFirstBall();
@@ -160,13 +184,14 @@ namespace Bowling.Gameplay.Tests
         {
             _rig.PlayToFirstBall();
             int eventsBefore = _rig.Events.Count;
+            int logBefore = _rig.Log.Entries.Count;
 
             _rig.Throws.Reject(ThrowRejection.LowConfidence);
 
             Assert.AreEqual(GameState.AwaitReady, Current.State);
             Assert.AreEqual(eventsBefore, _rig.Events.Count);
             Assert.AreEqual(1, _rig.Throws.ArmCount);
-            Assert.IsEmpty(_rig.Log.Entries, "the source is already waiting (P-10)");
+            Assert.AreEqual(logBefore, _rig.Log.Entries.Count, "the source is already waiting (P-10)");
         }
 
         [Test]
