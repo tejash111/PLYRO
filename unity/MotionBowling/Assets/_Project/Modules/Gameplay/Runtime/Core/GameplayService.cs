@@ -25,6 +25,9 @@ namespace Bowling.Gameplay
         private readonly Action _resume;
         private readonly Action _abandon;
         private readonly Action<bool> _presenceChanged;
+        private readonly Action<PlayerProfile> _calibrationCompleted;
+        private readonly Action<CalibrationFailure> _calibrationFailed;
+        private readonly Action<SwingPhase> _phaseChanged;
 
         /// <summary>Starts in Attract without raising anything (P-11). Throws ArgumentNullException for a null argument.</summary>
         public GameplayService(IPlayerInput input, IPlayerCalibrator calibrator, IThrowSource throwSource,
@@ -54,8 +57,14 @@ namespace Bowling.Gameplay
             _resume = _machine.Resume;
             _abandon = _machine.Abandon;
             _presenceChanged = _machine.OnPresenceChanged;
+            _calibrationCompleted = _machine.OnCalibrationCompleted;
+            _calibrationFailed = _machine.OnCalibrationFailed;
+            _phaseChanged = _machine.OnPhaseChanged;
 
             input.PresenceChanged += OnPresenceChanged;
+            calibrator.Completed += OnCalibrationCompleted;
+            calibrator.Failed += OnCalibrationFailed;
+            throwSource.PhaseChanged += OnPhaseChanged;
         }
 
         /// <summary>The latest snapshot. Never null: the constructor seeds it.</summary>
@@ -101,6 +110,12 @@ namespace Bowling.Gameplay
 
         // The dependency event handlers. Each one goes through the gate like a command.
         private void OnPresenceChanged(bool present) => Run(_presenceChanged, present);
+
+        private void OnCalibrationCompleted(PlayerProfile profile) => Run(_calibrationCompleted, profile);
+
+        private void OnCalibrationFailed(CalibrationFailure reason) => Run(_calibrationFailed, reason);
+
+        private void OnPhaseChanged(SwingPhase phase) => Run(_phaseChanged, phase);
 
         // The run-to-completion gate (P-7). If a body throws, the calls it queued are dropped and the gate reopens.
         private void Run(Action body)

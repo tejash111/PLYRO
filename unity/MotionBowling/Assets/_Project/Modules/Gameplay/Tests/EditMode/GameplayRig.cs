@@ -17,6 +17,9 @@ namespace Bowling.Gameplay.Tests
         /// <summary>The wall-clock time the service and the default leaderboard see.</summary>
         public static readonly DateTime UtcNow = new DateTime(2026, 10, 19, 12, 0, 0, DateTimeKind.Utc);
 
+        /// <summary>The profile <see cref="CompleteCalibration"/> hands the service. Not the default profile, so a test can tell them apart.</summary>
+        public static readonly PlayerProfile Profile = new PlayerProfile(Handedness.Left, 0.70f, 0.42f, 0.45f);
+
         public readonly FakeClock Clock = new FakeClock();
         public readonly FakePlayerInput Input = new FakePlayerInput();
         public readonly FakeCalibrator Calibrator = new FakeCalibrator();
@@ -77,6 +80,19 @@ namespace Bowling.Gameplay.Tests
         {
             Join();
             Service.SelectMode(players, frames, difficulty);
+        }
+
+        /// <summary>In Calibrate: the calibrator finishes with <paramref name="profile"/> (default <see cref="Profile"/>).</summary>
+        public void CompleteCalibration(PlayerProfile? profile = null)
+        {
+            Calibrator.Complete(profile ?? Profile);
+        }
+
+        /// <summary>From Attract: <see cref="StartGame"/>, then <see cref="CompleteCalibration"/>, which leaves the game in AwaitReady.</summary>
+        public void PlayToFirstBall(int players = 1, int frames = 3, Difficulty difficulty = Difficulty.Casual)
+        {
+            StartGame(players, frames, difficulty);
+            CompleteCalibration();
         }
 
         public void Dispose()
