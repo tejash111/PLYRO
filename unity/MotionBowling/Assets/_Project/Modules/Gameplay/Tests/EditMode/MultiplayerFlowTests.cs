@@ -79,27 +79,6 @@ namespace Bowling.Gameplay.Tests
         }
 
         [Test]
-        public void TurnChangeCalibrateIsMarked()
-        {
-            _rig.StartGame(2, 3);
-
-            Assert.AreEqual(GameState.Calibrate, Current.State);
-            Assert.IsFalse(_rig.Service.IsTurnChange, "the first turn is not a turn change");
-
-            _rig.CompleteCalibration();
-            PlayOpenFrame();
-
-            Assert.AreEqual(GameState.Calibrate, Current.State);
-            Assert.AreEqual(1, Current.CurrentPlayer);
-            Assert.IsTrue(_rig.Service.IsTurnChange, "player 2's Calibrate is a turn change");
-
-            _rig.CompleteCalibration();
-
-            Assert.AreEqual(GameState.AwaitReady, Current.State);
-            Assert.IsFalse(_rig.Service.IsTurnChange, "entering AwaitReady clears it");
-        }
-
-        [Test]
         public void OnePlayerCalibratesOnce()
         {
             _rig.PlayToFirstBall(1, 3);

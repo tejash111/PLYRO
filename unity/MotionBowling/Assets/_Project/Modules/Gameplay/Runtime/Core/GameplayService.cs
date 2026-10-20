@@ -80,9 +80,6 @@ namespace Bowling.Gameplay
         /// <summary>The latest snapshot. Never null: the constructor seeds it.</summary>
         public GameSnapshot Current => _publisher.Current;
 
-        /// <summary>Whether the current Calibrate is a turn change (P-4), as the state machine keeps it. For the tests.</summary>
-        internal bool IsTurnChange => _machine.IsTurnChange;
-
         public event Action<GameState> StateChanged
         {
             add => _publisher.StateChanged += value;

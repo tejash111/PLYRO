@@ -43,5 +43,11 @@ namespace Bowling.Gameplay
             _sim.SetRack(session.Rack);
             _throwSource.Arm(new ThrowContext(session.Current.Profile ?? DefaultProfiles.For(_tuning), session.Difficulty));
         }
+
+        /// <summary>Paused: disarms. The rack and bumpers stay as they are, for the state it resumes into.</summary>
+        public void EnterPaused()
+        {
+            _throwSource.Disarm();
+        }
     }
 }

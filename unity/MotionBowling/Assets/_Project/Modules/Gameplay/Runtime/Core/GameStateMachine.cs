@@ -4,8 +4,8 @@ namespace Bowling.Gameplay
 {
     /// <summary>
     /// The game states, their transitions and timers (spec section 4, P-3 to P-6, P-11). It hosts the per-phase flows
-    /// (<see cref="LobbyFlow"/>, <see cref="TurnFlow"/>, <see cref="GameEndFlow"/>), and runs the Scoring hold and the
-    /// turn changes itself. Every transition sets the state and its entry time, then publishes;
+    /// (<see cref="LobbyFlow"/>, <see cref="TurnFlow"/>, <see cref="PauseFlow"/>, <see cref="GameEndFlow"/>), and runs
+    /// the Scoring hold and the turn changes itself. Every transition sets the state and its entry time, then publishes;
     /// <see cref="CalibrationRun"/> and <see cref="StateEntryActions"/> only run its bookkeeping and side effects. Not
     /// re-entrant: <see cref="GameplayService"/> runs each call to completion (P-7).
     /// </summary>
@@ -26,6 +26,7 @@ namespace Bowling.Gameplay
         private readonly LobbyFlow _lobby;
         private readonly GameEndFlow _end;
         private readonly TurnFlow _turn;
+        private readonly PauseFlow _pause;
 
         private double _enteredAt;              // clock time at which State was entered
         private MarkKind _scoredMark;           // the scored mark: a Strike or Spare holds Scoring longer, for the replay
@@ -52,6 +53,7 @@ namespace Bowling.Gameplay
             _lobby = new LobbyFlow(this, _presence, tuning);
             _end = new GameEndFlow(this, _presence, tuning, leaderboard);
             _turn = new TurnFlow(this, _presence, tuning, rollSimulator, _calibration);
+            _pause = new PauseFlow(this, _presence, tuning, _entry, _calibration);
             Preset = ReadPreset();
             BeginState(GameState.Attract);
             _publisher.Seed(BuildSnapshot());
@@ -65,14 +67,21 @@ namespace Bowling.Gameplay
         /// <summary>The settings' default difficulty (P-11), for the flows.</summary>
         internal DifficultyProfile Preset { get; private set; }
 
-        /// <summary>This Calibrate is a turn change (P-4). Entering AwaitReady or Attract, and a new game, clear it.</summary>
+        /// <summary>
+        /// This Calibrate is a turn change (P-4). Entering AwaitReady or Attract, and a new game, clear it; Paused and
+        /// the resume leave it as it is.
+        /// </summary>
         internal bool IsTurnChange { get; private set; }
 
-        /// <summary>Polls presence (the P-3 backstop), then makes at most one transition.</summary>
+        /// <summary>Polls presence (the P-3 backstop), then makes at most one transition: a deferred pause comes first.</summary>
         public void Tick()
         {
             double now = _clock.Now;
             _presence.Observe(_input.IsPlayerPresent, now);
+            if (_pause.ApplyDeferredPause())
+            {
+                return;
+            }
 
             switch (State)
             {
@@ -82,7 +91,17 @@ namespace Bowling.Gameplay
                     _lobby.Tick(now);
                     break;
                 case GameState.Calibrate:
-                    _calibration.BeginIfIdle(_presence.IsPresent);    // P-4
+                case GameState.AwaitReady:
+                case GameState.AwaitThrow:
+                    _pause.TickPausable(now);
+                    if (State == GameState.Calibrate)
+                    {
+                        _calibration.BeginIfIdle(_presence.IsPresent);    // P-4, unless the pause rule just left
+                    }
+
+                    break;
+                case GameState.Paused:
+                    _pause.TickPaused(now);
                     break;
                 case GameState.Scoring:
                     TickScoring(now);
@@ -107,7 +126,17 @@ namespace Bowling.Gameplay
 
         public void OnRejected(ThrowRejection reason) => _turn.OnRejected(reason);
 
-        public void OnRollCompleted(RollResult result) => _turn.OnRollCompleted(result);
+        /// <summary>Rolling: a deferred <c>Abandon()</c> ends the game unscored (P-6); otherwise TurnFlow scores the roll.</summary>
+        public void OnRollCompleted(RollResult result)
+        {
+            if (State == GameState.Rolling && _pause.AbandonDeferred)
+            {
+                Enter(GameState.Attract);
+                return;
+            }
+
+            _turn.OnRollCompleted(result);
+        }
 
         /// <summary>
         /// ModeSelect hands the choice to <see cref="LobbyFlow"/>, and Results ("play again") to <see cref="GameEndFlow"/>;
@@ -129,15 +158,18 @@ namespace Bowling.Gameplay
             }
         }
 
-        // No state takes these yet, so each is ignored with the P-6 log.
-        public void Pause() => Ignore(nameof(Pause));
+        // The operator commands, all handled by PauseFlow (P-6).
+        public void Pause() => _pause.Pause();
 
-        public void Resume() => Ignore(nameof(Resume));
+        public void Resume() => _pause.Resume();
 
-        public void Abandon() => Ignore(nameof(Abandon));
+        public void Abandon() => _pause.Abandon();
 
         /// <summary>Seconds since <see cref="State"/> was entered, at <paramref name="now"/>.</summary>
         internal double TimeInState(double now) => now - _enteredAt;
+
+        /// <summary>P-6: a command where it doesn't apply, for the flows too: <c>Info("Gameplay", "&lt;Command&gt; ignored in &lt;State&gt;")</c>.</summary>
+        internal void Ignore(string command) => _log.Info(LogCategory, command + " ignored in " + State);
 
         /// <summary>A transition: the state, its entry time and on-enter actions, then the R21 events.</summary>
         internal void Enter(GameState state)
@@ -169,15 +201,18 @@ namespace Bowling.Gameplay
         // Everything a transition does except publishing, which the constructor replaces with a quiet Seed.
         private void BeginState(GameState state)
         {
+            GameState previous = State;
             State = state;
             _enteredAt = _clock.Now;
 
             switch (state)
             {
                 case GameState.Attract:
-                    // Disarm and the Attract guard, then the calibrator stops (P-6). Attract drops the session.
+                    // Disarm and the Attract guard, then the calibrator stops (P-6). Attract drops the session and
+                    // any deferred command.
                     _entry.EnterAttract();
                     _calibration.Cancel();
+                    _pause.Clear();
                     Session = null;
                     IsTurnChange = false;
                     break;
@@ -190,6 +225,9 @@ namespace Bowling.Gameplay
                 case GameState.AwaitReady:
                     IsTurnChange = false;
                     _entry.EnterAwaitReady(Session);
+                    break;
+                case GameState.Paused:
+                    _pause.EnterPaused(previous, _presence.IsPresent);
                     break;
                 case GameState.GameOver:
                     _end.EnterGameOver();
@@ -221,8 +259,5 @@ namespace Bowling.Gameplay
             : SnapshotBuilder.Lobby(State, _tuning.PresetFrameCount, Preset);
 
         private DifficultyProfile ReadPreset() => _difficulties.For(_settings.Load().DefaultDifficulty);
-
-        /// <summary>P-6: a command where it doesn't apply, logged for the flows too.</summary>
-        internal void Ignore(string command) => _log.Info(LogCategory, command + " ignored in " + State);
     }
 }
