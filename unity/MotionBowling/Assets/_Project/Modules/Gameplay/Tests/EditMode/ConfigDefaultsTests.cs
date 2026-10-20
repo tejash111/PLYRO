@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace Bowling.Gameplay.Tests
 {
-    /// <summary>The shipped defaults of GameplayTuning (spec section 8), DifficultyCatalog (D9) and DefaultProfiles (P-13).</summary>
+    /// <summary>The shipped defaults of GameplayTuning (spec section 4), DifficultyCatalog (D9) and DefaultProfiles (P-13).</summary>
     public sealed class ConfigDefaultsTests
     {
         private GameplayTuning _tuning;

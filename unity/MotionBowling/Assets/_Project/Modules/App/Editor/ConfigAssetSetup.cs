@@ -6,7 +6,7 @@ using UnityEngine;
 namespace Bowling.App.Editor
 {
     /// <summary>
-    /// Creates the committed config assets of the Gameplay module (gameplay spec, section 8): GameplayTuning and
+    /// Creates the committed config assets of the Gameplay module (gameplay spec, P-13): GameplayTuning and
     /// DifficultyCatalog under Assets/_Project/Config/Gameplay, each holding the defaults of its type. It writes only
     /// what is missing, so a second run changes nothing and never overwrites a hand-tuned asset. Run it headless with
     /// <c>tools/ci/unity.sh exec Bowling.App.Editor.ConfigAssetSetup.EnsureGameplayAssetsBatch</c>.

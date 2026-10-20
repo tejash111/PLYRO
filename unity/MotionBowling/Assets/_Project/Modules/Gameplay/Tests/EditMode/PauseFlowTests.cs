@@ -161,6 +161,7 @@ namespace Bowling.Gameplay.Tests
             _rig.Wait(0.25);
 
             Assert.AreEqual(GameState.Attract, Current.State);
+            Assert.That(_rig.Events, Has.None.EndsWith(" stale"));
         }
 
         [Test]

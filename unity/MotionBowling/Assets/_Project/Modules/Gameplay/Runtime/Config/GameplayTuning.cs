@@ -54,7 +54,7 @@ namespace Bowling.Gameplay
         [Tooltip("Frames (3, 5 or 10). The preset a ModeSelect timeout auto-selects (ModeSelect row, P-13).")]
         public int PresetFrameCount = 3;
 
-        [Header("Default player profile (used when calibration is skipped or fails)")]
+        [Header("Default player profile: used when calibration fails twice (P-4), and as the fallback for a player with no profile")]
         [Tooltip("Which hand bowls (P-13).")]
         public Handedness DefaultBowlingHand = Handedness.Right;
 

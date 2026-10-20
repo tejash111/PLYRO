@@ -118,6 +118,22 @@ namespace Bowling.Gameplay.Tests
         }
 
         [Test]
+        public void ResumeCancelsAPendingDeferredPause()
+        {
+            ReachRolling();
+
+            _rig.Service.Pause();
+            _rig.Service.Resume();
+            _rig.Sim.CompleteWith(PinMask.None);
+            _rig.EndScoring();
+            Assert.AreEqual(GameState.AwaitReady, Current.State);
+            _rig.Service.Tick();
+
+            Assert.AreEqual(GameState.AwaitReady, Current.State, "the cancelled pause is not applied");
+            Assert.That(_rig.Log.Entries, Has.None.Matches<GameLogEntry>(e => e.Message.StartsWith("Resume ignored")));
+        }
+
+        [Test]
         public void PauseInGameOverSubmitsOnce()
         {
             PlayToGameOver();
@@ -159,6 +175,26 @@ namespace Bowling.Gameplay.Tests
             Assert.IsEmpty(_rig.Outcomes, "the roll is not scored");
             Assert.AreEqual(PinMask.All, _rig.Sim.LastRack, "the roll has ended, so Attract resets the rack");
             Assert.IsEmpty(_rig.Leaderboard.Top(3, LeaderboardScope.AllTime, 5));
+            Assert.That(_rig.Events, Has.None.EndsWith(" stale"));
+        }
+
+        [Test]
+        public void AbandonDuringABallTwoRollResetsTheRack()
+        {
+            _rig.PlayToFirstBall();
+            _rig.Knock(7);
+            _rig.EndScoring();
+            Assert.AreEqual(PinMask.P8 | PinMask.P9 | PinMask.P10, _rig.Sim.LastRack, "ball 2 faces the three pins left");
+            int racksBefore = _rig.Sim.SetRackCount;
+
+            _rig.Throws.SetPhase(SwingPhase.Ready);
+            _rig.Throws.EmitThrow(GameplayRig.Throw);
+            _rig.Service.Abandon();
+            _rig.Sim.CompleteWith(PinMask.P10);
+
+            Assert.AreEqual(GameState.Attract, Current.State);
+            Assert.AreEqual(PinMask.All, _rig.Sim.LastRack, "Attract resets the rack once the roll has ended");
+            Assert.AreEqual(racksBefore + 1, _rig.Sim.SetRackCount);
         }
 
         [Test]

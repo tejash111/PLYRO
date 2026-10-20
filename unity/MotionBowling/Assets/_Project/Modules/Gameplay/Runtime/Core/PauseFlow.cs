@@ -114,12 +114,19 @@ namespace Bowling.Gameplay
             }
         }
 
-        /// <summary>Paused only: resumes at once, whether or not the player was ever absent (P-5).</summary>
+        /// <summary>
+        /// Paused: resumes at once, whether or not the player was ever absent (P-5). Rolling and Scoring: cancels a
+        /// pending deferred <c>Pause()</c> without a log. Ignored everywhere else (P-6).
+        /// </summary>
         public void Resume()
         {
             if (_host.State == GameState.Paused)
             {
                 _host.Enter(_tracker.ResumeState);
+            }
+            else if (_tracker.Deferred && (_host.State == GameState.Rolling || _host.State == GameState.Scoring))
+            {
+                _tracker.Deferred = false;
             }
             else
             {

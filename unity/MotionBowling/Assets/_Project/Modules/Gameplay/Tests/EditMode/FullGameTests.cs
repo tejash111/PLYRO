@@ -83,6 +83,7 @@ namespace Bowling.Gameplay.Tests
             Assert.AreEqual(90, scores["Player 2"]);
             Assert.AreEqual(150, scores["Player 3"]);
             Assert.AreEqual(0, scores["Player 4"]);
+            Assert.That(_rig.Events, Has.None.EndsWith(" stale"));
         }
 
         // `count` rolls of `pins`.

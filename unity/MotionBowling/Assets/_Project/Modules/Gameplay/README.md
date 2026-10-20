@@ -44,7 +44,7 @@ Every other type in the module is `internal`.
       - `FrameRules` and `RackDecision`: whether a frame is over and the rack the next ball faces.
       - `GameSession` and `PlayerSlot`: who plays, whose turn it is, and each player's card.
       - `SnapshotBuilder`: turns a session into the immutable `GameSnapshot`.
-      - `DefaultProfiles`: the profile used when calibration is skipped or fails.
+      - `DefaultProfiles`: the profile used when calibration fails twice (P-4), and as the fallback for a player with no profile.
 - `Tests/EditMode/`: EditMode tests for the module (`Bowling.Gameplay.Tests.EditMode`).
   - `GameplayRig` builds a service on the fakes for the flow tests.
   - `GameplayDriverTests` and `ConfigAssetTests` cover the driver and the committed assets.

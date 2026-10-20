@@ -14,7 +14,6 @@ namespace Bowling.Gameplay
     {
         private readonly GamePublisher _publisher;
         private readonly GameStateMachine _machine;
-        private readonly DifficultyCatalog _difficulties;
         private readonly Queue<Action> _queued = new Queue<Action>();
         private bool _running;
 
@@ -49,7 +48,6 @@ namespace Bowling.Gameplay
             Require(tuning, nameof(tuning));
             Require(difficulties, nameof(difficulties));
 
-            _difficulties = difficulties;
             _publisher = new GamePublisher(log);
             var leaderboardWriter = new LeaderboardWriter(leaderboard, log, utcNow);
             _machine = new GameStateMachine(input, calibrator, throwSource, rollSimulator, settings, clock, log, tuning,
@@ -108,7 +106,11 @@ namespace Bowling.Gameplay
         public void SelectMode(int playerCount, int frameCount, Difficulty difficulty)
         {
             GameSession.ValidateMode(playerCount, frameCount);
-            _difficulties.For(difficulty);      // throws for an undefined level
+            if (!Enum.IsDefined(typeof(Difficulty), difficulty))
+            {
+                throw new ArgumentOutOfRangeException(nameof(difficulty), difficulty, "Not a defined difficulty level.");
+            }
+
             Run(_selectMode, (playerCount, frameCount, difficulty));
         }
 

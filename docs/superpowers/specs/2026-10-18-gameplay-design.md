@@ -249,6 +249,7 @@ Writing the plan (`docs/superpowers/plans/2026-10-19-gameplay.md`) surfaced one 
   - It abandons to Attract after `abandonAfterPause` of absence, counted from the later of the pause entry and the start of the absence. So an operator pause with the player present lasts until `Resume()`.
 - **P-6 (operator commands):**
   - `Pause()` in Rolling or Scoring is deferred to the first Tick after the next state is entered. A pause that begins (from the presence rule or a direct `Pause()`) satisfies a pending deferred `Pause()`, so it is not applied again.
+  - `Resume()` in Rolling or Scoring cancels a pending deferred `Pause()`; otherwise it is ignored there as elsewhere outside Paused.
   - Resuming into GameOver doesn't submit again: there is one submission per game.
   - Attract on enter also calls `calibrator.Cancel()`.
   - A command where it doesn't apply is ignored and logged `Info("Gameplay", "<Command> ignored in <State>")`: `SelectMode` outside ModeSelect and Results, `Pause` in Attract, Results or Paused, `Resume` outside Paused, and `Abandon` in Attract.

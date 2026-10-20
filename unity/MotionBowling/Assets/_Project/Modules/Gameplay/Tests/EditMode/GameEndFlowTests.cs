@@ -65,6 +65,7 @@ namespace Bowling.Gameplay.Tests
             Assert.AreEqual(1, top.Count);
             AssertEntry("Player 1", 56, 3, top[0]);
             Assert.AreEqual(0, Current.Players.Count, "Attract drops the session");
+            Assert.That(_rig.Events, Has.None.EndsWith(" stale"));
         }
 
         [Test]

@@ -7,8 +7,8 @@ namespace Bowling.Gameplay.Tests
 {
     /// <summary>
     /// The lobby states (Attract, Join, ModeSelect) and the way into Calibrate (spec section 4): construction enters
-    /// Attract quietly behind the Attract guard (P-11), presence and timers move the game on (P-3), and SelectMode
-    /// validates in any state but only acts in ModeSelect (P-6).
+    /// Attract quietly behind the Attract guard (P-11), presence and timers move the game on (P-3), SelectMode
+    /// validates in any state but only acts in ModeSelect (P-6), and an operator pause keeps the lobby snapshot (P-11).
     /// </summary>
     public sealed class LobbyFlowTests
     {
@@ -198,15 +198,17 @@ namespace Bowling.Gameplay.Tests
             Assert.AreEqual(GameState.Attract, Current.State);
         }
 
-        [TestCase(0, 3, Difficulty.Casual)]
-        [TestCase(5, 3, Difficulty.Casual)]
-        [TestCase(1, 4, Difficulty.Casual)]
-        [TestCase(1, 3, (Difficulty)7)]
-        public void SelectModeRejectsBadArguments(int players, int frames, Difficulty difficulty)
+        [TestCase(0, 3, Difficulty.Casual, "playerCount")]
+        [TestCase(5, 3, Difficulty.Casual, "playerCount")]
+        [TestCase(1, 4, Difficulty.Casual, "frameCount")]
+        [TestCase(1, 3, (Difficulty)7, "difficulty")]
+        public void SelectModeRejectsBadArguments(int players, int frames, Difficulty difficulty, string parameter)
         {
             Assert.AreEqual(GameState.Attract, Current.State);
 
-            Assert.Throws<ArgumentOutOfRangeException>(() => _rig.Service.SelectMode(players, frames, difficulty));
+            var thrown = Assert.Throws<ArgumentOutOfRangeException>(() => _rig.Service.SelectMode(players, frames, difficulty));
+
+            Assert.AreEqual(parameter, thrown.ParamName);
         }
 
         [Test]
@@ -222,6 +224,30 @@ namespace Bowling.Gameplay.Tests
             Assert.AreEqual(eventsBefore, _rig.Events.Count);
             Assert.That(_rig.Log.Entries, Has.Exactly(1).Matches<GameLogEntry>(e =>
                 e.Level == GameLogLevel.Info && e.Category == "Gameplay" && e.Message == "SelectMode ignored in Join"));
+        }
+
+        [TestCase(GameState.Join)]
+        [TestCase(GameState.ModeSelect)]
+        public void PauseFromJoinAndModeSelect(GameState state)
+        {
+            _rig.Input.SetPresent(true);
+            _rig.Service.Tick();
+            if (state == GameState.ModeSelect)
+            {
+                _rig.Wait(_rig.Tuning.JoinGreeting);
+            }
+
+            Assert.AreEqual(state, Current.State);
+
+            _rig.Service.Pause();
+            Assert.AreEqual(GameState.Paused, Current.State);
+            Assert.AreEqual(0, Current.Players.Count, "Paused from the lobby has a lobby snapshot (P-11)");
+            Assert.AreEqual(1, Current.CurrentFrame);
+            Assert.AreEqual(1, Current.CurrentBall);
+            Assert.AreEqual(_rig.Tuning.PresetFrameCount, Current.FrameCount);
+            _rig.Service.Resume();
+
+            Assert.AreEqual(state, Current.State);
         }
 
         [Test]
